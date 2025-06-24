@@ -429,8 +429,7 @@ export const TooltipReporte = ({ tooltip }) => {
   );
 };
 
-// src/components/InterfazUsuario.js - SECCIÓN MODAL REPORTE MEJORADA
-// Reemplaza la función existente ModalReporte con esta versión mejorada
+// src/components/InterfazUsuario.js - SECCIÓN MODAL REPORTE CORREGIDA
 
 export const ModalReporte = ({ 
   mostrarModal, 
@@ -447,178 +446,47 @@ export const ModalReporte = ({
   // Validación temprana pero no return para evitar conflicto con useEffect
   const modalVisible = mostrarModal && reporteSeleccionado;
   
-  // Función para depuración de target
-  const debugTarget = (target) => {
-    console.log('===== DEPURACIÓN DE TARGET =====');
-    console.log('Target a analizar:', target);
-    console.log('Tipo de dato:', typeof target);
-    
-    if (target) {
-      // Verificar si ya es una abreviatura del frontend
-      const esAbreviatura = targetOptions.some(opt => opt.value === target);
-      console.log('¿Es ya una abreviatura?', esAbreviatura ? 'Sí' : 'No');
-      
-      // Intentar convertir de backend a frontend
-      if (!esAbreviatura) {
-        const convertido = convertBackendTargetToAbbr(target);
-        console.log('Intento de conversión Backend→Frontend:', target, '→', convertido);
-        console.log('¿Conversión exitosa?', convertido !== target ? 'Sí' : 'No');
-      }
-    }
-    
-    console.log('================================');
-  };
-
-// Versión mejorada para el useEffect del ModalReporte en InterfazUsuario.js
-// Añade o reemplaza este useEffect en el componente ModalReporte
-
-// useEffect para procesar el target cuando se abre el modal
-useEffect(() => {
-  if (mostrarModal && reporteSeleccionado) {
-    console.log('DEPURACIÓN - Modal abierto con reporte completo:', reporteSeleccionado);
-    
-    // Si hay datos del backend, vamos a procesarlos
-    try {
-      // Procesar target si existe
-      if (reporteSeleccionado.target) {
-        debugTarget(reporteSeleccionado.target);
-        
-        // Verificamos si el target NO es una abreviatura
-        const esAbreviatura = targetOptions.some(opt => opt.value === reporteSeleccionado.target);
-        
-        if (!esAbreviatura) {
-          // Es un valor del backend, necesitamos convertirlo
-          const targetAbreviado = convertBackendTargetToAbbr(reporteSeleccionado.target);
-          console.log('DEPURACIÓN - Convirtiendo target a abreviatura:', reporteSeleccionado.target, '→', targetAbreviado);
-          
-          // Actualizamos el reporte con la abreviatura
-          setReporteSeleccionado(prev => ({
-            ...prev,
-            target: targetAbreviado
-          }));
-        } else {
-          console.log('DEPURACIÓN - Target ya es una abreviatura:', reporteSeleccionado.target);
-        }
-      }
-      // Si no hay target pero el estado es 'no' o 'tarde', debemos asignar uno por defecto
-      else if (reporteSeleccionado.estado === 'no' || reporteSeleccionado.estado === 'tarde') {
-        console.log('DEPURACIÓN - Falta target pero el estado es:', reporteSeleccionado.estado);
-        
-        // Asignar target por defecto según el estado
-        let targetPredeterminado = '';
-        if (reporteSeleccionado.estado === 'no') {
-          targetPredeterminado = 'Fta'; // Abreviatura para "Falta"
-        } else if (reporteSeleccionado.estado === 'tarde') {
-          targetPredeterminado = 'Tde'; // Abreviatura para "Tarde"
-        }
-        
-        console.log('DEPURACIÓN - Asignando target predeterminado:', targetPredeterminado);
-        
-        // Actualizar el reporte con el target predeterminado
-        setReporteSeleccionado(prev => ({
-          ...prev,
-          target: targetPredeterminado
-        }));
-      }
-    } catch (error) {
-      console.error('Error al procesar target en modal:', error);
-    }
-  }
-}, [mostrarModal, reporteSeleccionado]);
-
-// Segundo useEffect para establecer valores predeterminados después del procesamiento del target
-useEffect(() => {
-  if (reporteSeleccionado) {
-    console.log('DEPURACIÓN - Verificando valores predeterminados:', reporteSeleccionado);
-    
-    let actualizacionNecesaria = false;
-    let reporteActualizado = { ...reporteSeleccionado };
-    
-    // Si el reporteSeleccionado existe, asegurarnos que horaReal tenga un valor
-    // cuando el estado es 'si' (Sí transmitió)
-    if (reporteSeleccionado.estado === 'si' && !reporteSeleccionado.horaReal) {
-      // Buscar el programa actual para obtener la hora predeterminada
-      const programaActual = programas.find(p => p.id === reporteSeleccionado?.programaId);
-      const horaPredeterminada = programaActual?.horario || "05:00";
-      
-      console.log('DEPURACIÓN - Estableciendo hora predeterminada en modal:', horaPredeterminada);
-      reporteActualizado.horaReal = horaPredeterminada;
-      actualizacionNecesaria = true;
-    }
-    
-    // Para estado 'no', asegurar que tiene un target
-    if (reporteSeleccionado.estado === 'no' && !reporteSeleccionado.target) {
-      reporteActualizado.target = 'Fta'; // Abreviatura para "Falta"
-      console.log('DEPURACIÓN - Estableciendo target predeterminado para No transmitió:', 'Fta');
-      actualizacionNecesaria = true;
-    }
-    
-    // Para estado 'tarde', asegurar que tiene target y horas
-    if (reporteSeleccionado.estado === 'tarde') {
-      if (!reporteSeleccionado.target) {
-        reporteActualizado.target = 'Tde'; // Abreviatura para "Tarde"
-        console.log('DEPURACIÓN - Estableciendo target predeterminado para Tarde:', 'Tde');
-        actualizacionNecesaria = true;
-      }
-      
-      if (!reporteSeleccionado.horaReal) {
-        const programaActual = programas.find(p => p.id === reporteSeleccionado?.programaId);
-        const horaPredeterminada = programaActual?.horario || "05:00";
-        reporteActualizado.horaReal = horaPredeterminada;
-        console.log('DEPURACIÓN - Estableciendo hora real predeterminada para Tarde:', horaPredeterminada);
-        actualizacionNecesaria = true;
-      }
-      
-      if (!reporteSeleccionado.hora_tt) {
-        // Para hora tardía, usar una hora posterior a la real
-        const horaBase = reporteActualizado.horaReal || "05:00";
-        const [horas, minutos] = horaBase.split(':').map(Number);
-        let horasRetrasadas = horas;
-        let minutosRetrasados = minutos + 30; // Añadir 30 minutos por defecto
-        
-        if (minutosRetrasados >= 60) {
-          horasRetrasadas += 1;
-          minutosRetrasados -= 60;
-        }
-        
-        if (horasRetrasadas >= 24) {
-          horasRetrasadas -= 24;
-        }
-        
-        const horaTardiaDefault = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
-        reporteActualizado.hora_tt = horaTardiaDefault;
-        console.log('DEPURACIÓN - Estableciendo hora tardía predeterminada:', horaTardiaDefault);
-        actualizacionNecesaria = true;
-      }
-    }
-    
-    // Actualizar el estado solo si es necesario
-    if (actualizacionNecesaria) {
-      console.log('DEPURACIÓN - Actualizando reporte con valores predeterminados:', reporteActualizado);
-      setReporteSeleccionado(reporteActualizado);
-    }
-  }
-}, [reporteSeleccionado, programas, setReporteSeleccionado]);
-
-
-
-  // useEffect para establecer valor predeterminado de horaReal
+  // useEffect para establecer valores predeterminados
   useEffect(() => {
     if (reporteSeleccionado) {
-      // Si el reporteSeleccionado existe, asegurarnos que horaReal tenga un valor
-      // cuando el estado es 'si' (Sí transmitió)
-      if (reporteSeleccionado.estado === 'si' && !reporteSeleccionado.horaReal) {
-        // Buscar el programa actual para obtener la hora predeterminada
-        const programaActual = programas.find(p => p.id === reporteSeleccionado?.programaId);
-        const horaPredeterminada = programaActual?.horario || "05:00";
+      let actualizacionNecesaria = false;
+      let reporteActualizado = { ...reporteSeleccionado };
+      
+      // Para estado 'tarde', asegurar que tiene horas
+      if (reporteSeleccionado.estado === 'tarde') {
+        // Si no hay hora real, usar la del programa
+        if (!reporteSeleccionado.horaReal) {
+          const programaActual = programas.find(p => p.id === reporteSeleccionado?.programaId);
+          const horaPredeterminada = programaActual?.horario || "05:00";
+          reporteActualizado.horaReal = horaPredeterminada;
+          actualizacionNecesaria = true;
+        }
         
-        console.log('DEPURACIÓN - Estableciendo hora predeterminada en modal:', horaPredeterminada);
-        
-        // Actualizar el estado de manera segura
-        setReporteSeleccionado(prev => ({
-          ...prev,
-          horaReal: horaPredeterminada
-        }));
+        // Si no hay hora_tt, usar una 10 minutos después de la real
+        if (!reporteSeleccionado.hora_tt) {
+          const horaBase = reporteActualizado.horaReal || "05:00";
+          const [horas, minutos] = horaBase.split(':').map(Number);
+          let minutosRetrasados = minutos + 10; // Añadir 10 minutos por defecto
+          let horasRetrasadas = horas;
+          
+          if (minutosRetrasados >= 60) {
+            horasRetrasadas += 1;
+            minutosRetrasados -= 60;
+          }
+          
+          if (horasRetrasadas >= 24) {
+            horasRetrasadas -= 24;
+          }
+          
+          const horaTardiaDefault = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
+          reporteActualizado.hora_tt = horaTardiaDefault;
+          actualizacionNecesaria = true;
+        }
+      }
+      
+      // Actualizar el estado solo si es necesario
+      if (actualizacionNecesaria) {
+        setReporteSeleccionado(reporteActualizado);
       }
     }
   }, [reporteSeleccionado, programas, setReporteSeleccionado]);
@@ -633,7 +501,6 @@ useEffect(() => {
   // Handler para cambio de hora real con validación
   const handleHoraRealChange = (e) => {
     const newHora = e.target.value;
-    console.log('DEPURACIÓN - Cambiando hora real a:', newHora);
     
     setReporteSeleccionado({
       ...reporteSeleccionado,
@@ -663,8 +530,10 @@ useEffect(() => {
       setReporteSeleccionado({
         ...reporteSeleccionado,
         estado: nuevoEstado,
+        horaReal: reporteSeleccionado.horaReal || horaPrograma,
         hora_tt: reporteSeleccionado.hora_tt || horaPrograma,
-        target: reporteSeleccionado.target || "Tde" // Abreviatura para Tarde
+        target: reporteSeleccionado.target || "Tde", // Target predeterminado para Tarde
+        motivo: null // Reset del motivo al cambiar de estado
       });
     }
     // Cuando cambia a estado "no", establecer target predeterminado
@@ -674,7 +543,8 @@ useEffect(() => {
         estado: nuevoEstado,
         horaReal: null,
         hora_tt: null,
-        target: reporteSeleccionado.target || "Fta" // Abreviatura para Falta
+        target: reporteSeleccionado.target || "Fta", // Abreviatura para Falta
+        motivo: null
       });
     }
     else {
@@ -684,19 +554,6 @@ useEffect(() => {
         estado: nuevoEstado
       });
     }
-  };
-
-  // Handler para cambio de target
-  const handleTargetChange = (e) => {
-    const nuevoTarget = e.target.value;
-    console.log('DEPURACIÓN - Target seleccionado:', nuevoTarget);
-    
-    setReporteSeleccionado({
-      ...reporteSeleccionado,
-      target: nuevoTarget,
-      // Limpiar el motivo personalizado si no es "Otros"
-      motivo: nuevoTarget !== 'Otros' ? nuevoTarget : reporteSeleccionado.motivo
-    });
   };
 
   return (
@@ -727,15 +584,6 @@ useEffect(() => {
             <p className="text-sm text-gray-600 mb-4">
               <strong>Fecha:</strong> {formatearFecha(reporteSeleccionado.fecha)}
             </p>
-            
-            {/* Información de depuración (visible solo en desarrollo) */}
-            {process.env.NODE_ENV !== 'production' && (
-              <div className="p-2 bg-gray-100 rounded-md text-xs text-gray-600 mb-4">
-                <p><strong>Debug:</strong> Target={reporteSeleccionado.target || 'null'}</p>
-                <p>Estado={reporteSeleccionado.estado || 'null'}</p>
-                <p>ID={reporteSeleccionado.id_reporte || 'nuevo'}</p>
-              </div>
-            )}
           </div>
 
           <div className="mb-4">
@@ -766,10 +614,6 @@ useEffect(() => {
                 onChange={handleHoraRealChange}
                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
-              {/* Campo para depuración */}
-              <div className="text-xs text-gray-400 mt-1">
-                Valor actual: {reporteSeleccionado.horaReal || "No establecido"}
-              </div>
             </div>
           )}
 
@@ -786,10 +630,6 @@ useEffect(() => {
                   onChange={handleHoraRealChange}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                {/* Campo para depuración */}
-                <div className="text-xs text-gray-400 mt-1">
-                  Hora real: {reporteSeleccionado.horaReal || "No establecido"}
-                </div>
               </div>
               
               <div className="mb-4">
@@ -805,10 +645,6 @@ useEffect(() => {
                   })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                {/* Campo para depuración */}
-                <div className="text-xs text-gray-400 mt-1">
-                  Hora tardía: {reporteSeleccionado.hora_tt || "No establecido"}
-                </div>
               </div>
 
               <div className="mb-4">
@@ -817,7 +653,12 @@ useEffect(() => {
                 </label>
                 <select
                   value={reporteSeleccionado.target || ''}
-                  onChange={handleTargetChange}
+                  onChange={(e) => setReporteSeleccionado({
+                    ...reporteSeleccionado,
+                    target: e.target.value,
+                    // Limpiar el motivo personalizado si no es "Otros"
+                    motivo: e.target.value !== 'Otros' ? e.target.value : reporteSeleccionado.motivo
+                  })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="" disabled>Seleccione un motivo</option>
@@ -825,10 +666,6 @@ useEffect(() => {
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                {/* Campo para depuración */}
-                <div className="text-xs text-gray-400 mt-1">
-                  Target seleccionado: {reporteSeleccionado.target || "No seleccionado"}
-                </div>
               </div>
 
               {reporteSeleccionado.target === 'Otros' && (
@@ -842,7 +679,7 @@ useEffect(() => {
                       ...reporteSeleccionado,
                       motivo: e.target.value
                     })}
-                    placeholder="Explica el motivo..."
+                    placeholder="Explica el motivo del retraso..."
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="3"
                   />
@@ -860,7 +697,10 @@ useEffect(() => {
                 </label>
                 <select
                   value={reporteSeleccionado.target || ''}
-                  onChange={handleTargetChange}
+                  onChange={(e) => setReporteSeleccionado({
+                    ...reporteSeleccionado,
+                    target: e.target.value
+                  })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="" disabled>Seleccione un motivo</option>
@@ -868,12 +708,6 @@ useEffect(() => {
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                {/* Información de depuración */}
-                <div className="text-xs text-gray-400 mt-1">
-                  Target seleccionado: {reporteSeleccionado.target || "No seleccionado"} 
-                  {reporteSeleccionado.target && !targetOptions.find(opt => opt.value === reporteSeleccionado.target) && 
-                    " (¡Valor no encontrado en opciones!)"}
-                </div>
               </div>
 
               {reporteSeleccionado.target === 'Otros' && (
@@ -907,9 +741,8 @@ useEffect(() => {
               onClick={guardarReporte}
               disabled={guardandoReporte || 
                 (reporteSeleccionado.estado === 'si' && !reporteSeleccionado.horaReal) ||
-                (reporteSeleccionado.estado === 'tarde' && !reporteSeleccionado.hora_tt) ||
-                ((reporteSeleccionado.estado === 'tarde' || reporteSeleccionado.estado === 'no') && 
-                 !reporteSeleccionado.target)}
+                (reporteSeleccionado.estado === 'tarde' && (!reporteSeleccionado.horaReal || !reporteSeleccionado.hora_tt)) ||
+                (reporteSeleccionado.estado === 'no' && !reporteSeleccionado.target)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
             >
               {guardandoReporte && (
@@ -924,8 +757,6 @@ useEffect(() => {
     </div>
   );
 }
-
-
 
 
 // ==================== COMPONENTE MODAL DE NOTAS ====================

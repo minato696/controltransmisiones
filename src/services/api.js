@@ -464,6 +464,30 @@ export const getReportePorId = async (id) => {
 /**
  * Crear un nuevo reporte - IMPLEMENTACIÓN PARA "SÍ TRANSMITIÓ" Y "NO TRANSMITIÓ"
  */
+
+
+
+
+
+
+
+/**
+ * Eliminar un reporte
+ */
+export const deleteReporte = async (id) => {
+  try {
+    const response = await api.delete(`${REPORTE_ENDPOINTS.DELETE}/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// src/services/api.js - FUNCIONES CORREGIDAS PARA "TRANSMITIO TARDE"
+
+/**
+ * Crear un nuevo reporte - IMPLEMENTACIÓN CORREGIDA
+ */
 export const createReporte = async (reporteData) => {
   try {
     console.log('DEPURACIÓN - API - Datos recibidos en createReporte:', reporteData);
@@ -475,61 +499,8 @@ export const createReporte = async (reporteData) => {
     const esTardio = estado === 'Tarde' || estado === 'tarde';
     
     console.log('DEPURACIÓN - Estado determinado:', estado);
-    console.log('DEPURACIÓN - ¿Es "Sí transmitió"?', esSiTransmitio);
-    console.log('DEPURACIÓN - ¿Es "No transmitió"?', esNoTransmitio);
-    console.log('DEPURACIÓN - ¿Es "Transmitió Tarde"?', esTardio);
     
-    // ===== PASO 2: Extraer la hora del usuario (solo para "Sí transmitió" y "Transmitió Tarde") =====
-    let horaUsuario = null;
-    
-    if (esSiTransmitio || esTardio) {
-      if (reporteData.hora !== undefined) {
-        horaUsuario = reporteData.hora;
-      } else if (reporteData.horaReal !== undefined) {
-        horaUsuario = reporteData.horaReal;
-      } else if (reporteData.hora_real !== undefined) {
-        horaUsuario = reporteData.hora_real;
-      } else {
-        // Solo en caso de no encontrar ningún valor
-        horaUsuario = "05:00";
-        console.log('DEPURACIÓN - No se encontró hora del usuario, usando valor por defecto:', horaUsuario);
-      }
-      
-      // Asegurar que la hora sea string
-      if (typeof horaUsuario !== 'string') {
-        horaUsuario = String(horaUsuario);
-      }
-      
-      console.log('DEPURACIÓN - Hora final a usar:', horaUsuario);
-    }
-    
-    // ===== PASO 3: Extraer target/motivo y convertir abreviatura a valor del backend =====
-    let targetUsuario = null;
-    
-    if (esNoTransmitio || esTardio) {
-      // Para No transmitió y Tardío, usamos el target seleccionado
-      if (reporteData.target !== undefined && reporteData.target !== null) {
-        // Convertir de abreviatura (frontend) a valor completo (backend)
-        targetUsuario = convertAbbrToBackendTarget(reporteData.target);
-        console.log('DEPURACIÓN - Target seleccionado:', reporteData.target, '→ Convertido a:', targetUsuario);
-      }
-    }
-    
-    // ===== PASO 4: Hora TT (solo para transmisión tardía) =====
-    let horaTT = null;
-    
-    if (esTardio) {
-      if (reporteData.hora_tt !== undefined) {
-        horaTT = reporteData.hora_tt;
-      } else {
-        // Si no hay hora_tt específica, usar la hora real
-        horaTT = horaUsuario;
-      }
-      
-      console.log('DEPURACIÓN - Hora TT a usar:', horaTT);
-    }
-    
-    // ===== PASO 5: Formatear la fecha correctamente =====
+    // ===== PASO 2: Formatear la fecha correctamente =====
     let fechaFormateada;
     
     if (typeof reporteData.fecha === 'string') {
@@ -565,7 +536,64 @@ export const createReporte = async (reporteData) => {
     
     console.log('DEPURACIÓN - Fecha formateada:', fechaFormateada);
     
-    // ===== PASO 6: Crear el objeto según el estado =====
+    // ===== PASO 3: Extraer datos específicos según el estado =====
+    let horaUsuario = null;
+    let horaTT = null;
+    let targetUsuario = null;
+    let motivoUsuario = null;
+    
+    // Extraer la hora real (para "Sí transmitió" y "Transmitió Tarde")
+    if (esSiTransmitio || esTardio) {
+      if (reporteData.hora !== undefined) {
+        horaUsuario = reporteData.hora;
+      } else if (reporteData.horaReal !== undefined) {
+        horaUsuario = reporteData.horaReal;
+      } else if (reporteData.hora_real !== undefined) {
+        horaUsuario = reporteData.hora_real;
+      } else {
+        // Solo en caso de no encontrar ningún valor
+        horaUsuario = "05:00";
+      }
+      
+      // Asegurar que la hora sea string
+      if (typeof horaUsuario !== 'string') {
+        horaUsuario = String(horaUsuario);
+      }
+    }
+    
+    // Extraer la hora TT (solo para "Transmitió Tarde")
+    if (esTardio) {
+      if (reporteData.hora_tt !== undefined) {
+        horaTT = reporteData.hora_tt;
+      } else {
+        // Si no hay hora_tt específica, usar 10 minutos después de la hora real
+        const [horas, minutos] = horaUsuario.split(':').map(Number);
+        let minutosRetrasados = minutos + 10;
+        let horasRetrasadas = horas;
+        
+        if (minutosRetrasados >= 60) {
+          horasRetrasadas += 1;
+          minutosRetrasados -= 60;
+        }
+        
+        horaTT = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
+      }
+    }
+    
+    // Extraer target (solo para "No transmitió")
+    if (esNoTransmitio) {
+      if (reporteData.target !== undefined && reporteData.target !== null) {
+        // Convertir de abreviatura (frontend) a valor completo (backend)
+        targetUsuario = convertAbbrToBackendTarget(reporteData.target);
+      }
+    }
+    
+    // Extraer motivo (para "No transmitió" con Otros, o "Transmitió Tarde" opcional)
+    if ((esNoTransmitio && reporteData.target === 'Otros') || esTardio) {
+      motivoUsuario = reporteData.motivo || null;
+    }
+    
+    // ===== PASO 4: Crear el objeto según el estado =====
     let reporteObjeto;
     
     if (esSiTransmitio) {
@@ -586,21 +614,21 @@ export const createReporte = async (reporteData) => {
       reporteObjeto = {
         fecha: fechaFormateada,
         estadoTransmision: "No",
-        target: targetUsuario,  // Target ya convertido a formato backend
-        motivo: null,           // Motivo null según formato del backend
+        target: targetUsuario,
+        motivo: motivoUsuario,
         filialId: parseInt(reporteData.filialId),
         programaId: parseInt(reporteData.programaId),
-        hora: null,             // Para "No transmitió", la hora es null
+        hora: null,
         hora_tt: null
       };
     }
     else if (esTardio) {
-      // Objeto para "Transmitió Tarde"
+      // Objeto para "Transmitió Tarde" - AJUSTADO AL FORMATO DEL BACKEND
       reporteObjeto = {
         fecha: fechaFormateada,
         estadoTransmision: "Tarde",
-        target: targetUsuario,  // Target ya convertido a formato backend
-        motivo: reporteData.motivo || null,
+        target: null,           // Target es null para transmisión tardía según el backend
+        motivo: motivoUsuario,  // Motivo puede ser null o tener valor
         filialId: parseInt(reporteData.filialId),
         programaId: parseInt(reporteData.programaId),
         hora: horaUsuario,      // Hora real de transmisión
@@ -621,7 +649,7 @@ export const createReporte = async (reporteData) => {
       };
     }
     
-    // ===== PASO 6: Enviar al backend como array =====
+    // ===== PASO 5: Enviar al backend como array =====
     console.log('DEPURACIÓN - Objeto final a enviar:', reporteObjeto);
     
     // IMPORTANTE: Enviar como array con un solo objeto
@@ -631,31 +659,24 @@ export const createReporte = async (reporteData) => {
     return Array.isArray(response.data) ? response.data[0] : response.data;
   } catch (error) {
     console.error('DEPURACIÓN - Error en createReporte:', error);
-    // Mostrar más detalles del error si están disponibles
-    if (error.response) {
-      console.error('Status:', error.response.status);
-      console.error('Data:', error.response.data);
-    }
     throw error;
   }
 };
 
-
 /**
- * Actualizar un reporte existente - IMPLEMENTACIÓN PARA "SÍ TRANSMITIÓ" Y "NO TRANSMITIÓ"
+ * Actualizar un reporte existente - IMPLEMENTACIÓN CORREGIDA
  */
 export const updateReporte = async (id, reporteData) => {
   try {
     console.log('DEPURACIÓN - Actualizando reporte ID:', id, 'con datos:', reporteData);
     
     // ===== PASO 1: Determinar el estado =====
-    const estado = reporteData.estadoTransmision || 'Pendiente';
+    const estado = reporteData.estadoTransmision || reporteData.estado || 'Pendiente';
     const esSiTransmitio = estado === 'Si' || estado === 'si';
     const esNoTransmitio = estado === 'No' || estado === 'no';
+    const esTardio = estado === 'Tarde' || estado === 'tarde';
     
     console.log('DEPURACIÓN - Estado determinado:', estado);
-    console.log('DEPURACIÓN - ¿Es "Sí transmitió"?', esSiTransmitio);
-    console.log('DEPURACIÓN - ¿Es "No transmitió"?', esNoTransmitio);
     
     // ===== PASO 2: Formatear fecha si es necesario =====
     let fechaFormateada;
@@ -686,14 +707,14 @@ export const updateReporte = async (id, reporteData) => {
     
     console.log('DEPURACIÓN - Fecha formateada:', fechaFormateada);
     
-    // ===== PASO 3: Crear objeto de actualización según el estado =====
-    let updateObjeto;
+    // ===== PASO 3: Extraer datos específicos según el estado =====
+    let horaUsuario = null;
+    let horaTT = null;
+    let targetUsuario = null;
+    let motivoUsuario = null;
     
-    if (esSiTransmitio) {
-      // ----- Para "Sí transmitió" -----
-      // Extraer hora
-      let horaUsuario;
-      
+    // Extraer la hora real (para "Sí transmitió" y "Transmitió Tarde")
+    if (esSiTransmitio || esTardio) {
       if (reporteData.hora !== undefined) {
         horaUsuario = reporteData.hora;
       } else if (reporteData.horaReal !== undefined) {
@@ -701,18 +722,52 @@ export const updateReporte = async (id, reporteData) => {
       } else if (reporteData.hora_real !== undefined) {
         horaUsuario = reporteData.hora_real;
       } else {
-        // Solo como último recurso
+        // Solo en caso de no encontrar ningún valor
         horaUsuario = "05:00";
-        console.log('DEPURACIÓN - No se encontró hora del usuario, usando valor por defecto:', horaUsuario);
       }
       
-      // Asegurar que sea string
+      // Asegurar que la hora sea string
       if (typeof horaUsuario !== 'string') {
         horaUsuario = String(horaUsuario);
       }
-      
-      console.log('DEPURACIÓN - Hora final a usar:', horaUsuario);
-      
+    }
+    
+    // Extraer la hora TT (solo para "Transmitió Tarde")
+    if (esTardio) {
+      if (reporteData.hora_tt !== undefined) {
+        horaTT = reporteData.hora_tt;
+      } else {
+        // Si no hay hora_tt específica, usar 10 minutos después de la hora real
+        const [horas, minutos] = horaUsuario.split(':').map(Number);
+        let minutosRetrasados = minutos + 10;
+        let horasRetrasadas = horas;
+        
+        if (minutosRetrasados >= 60) {
+          horasRetrasadas += 1;
+          minutosRetrasados -= 60;
+        }
+        
+        horaTT = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
+      }
+    }
+    
+    // Extraer target (solo para "No transmitió")
+    if (esNoTransmitio) {
+      if (reporteData.target !== undefined && reporteData.target !== null) {
+        // Convertir de abreviatura (frontend) a valor completo (backend)
+        targetUsuario = convertAbbrToBackendTarget(reporteData.target);
+      }
+    }
+    
+    // Extraer motivo (para "No transmitió" con Otros, o "Transmitió Tarde" opcional)
+    if ((esNoTransmitio && reporteData.target === 'Otros') || esTardio) {
+      motivoUsuario = reporteData.motivo || null;
+    }
+    
+    // ===== PASO 4: Crear objeto de actualización según el estado =====
+    let updateObjeto;
+    
+    if (esSiTransmitio) {
       // Objeto para "Sí transmitió"
       updateObjeto = {
         id_reporte: id,
@@ -727,67 +782,63 @@ export const updateReporte = async (id, reporteData) => {
       };
     } 
     else if (esNoTransmitio) {
-      // ----- Para "No transmitió" -----
-      // Extraer target
-      let targetUsuario = null;
-      
-      if (reporteData.target !== undefined) {
-        targetUsuario = reporteData.target;
-      }
-      
-      console.log('DEPURACIÓN - Target seleccionado:', targetUsuario);
-      
       // Objeto para "No transmitió"
       updateObjeto = {
         id_reporte: id,
         fecha: fechaFormateada,
         estadoTransmision: "No",
-        target: targetUsuario,  // Target seleccionado
-        motivo: null,           // Siempre null
+        target: targetUsuario,
+        motivo: motivoUsuario,
         filialId: parseInt(reporteData.filialId),
         programaId: parseInt(reporteData.programaId),
-        hora: null,             // Siempre null
-        hora_tt: null           // Siempre null
+        hora: null,
+        hora_tt: null
+      };
+    }
+    else if (esTardio) {
+      // Objeto para "Transmitió Tarde" - AJUSTADO AL FORMATO DEL BACKEND
+      updateObjeto = {
+        id_reporte: id,
+        fecha: fechaFormateada,
+        estadoTransmision: "Tarde",
+        target: null,           // Target es null para transmisión tardía según el backend
+        motivo: motivoUsuario,  // Motivo puede ser null o tener valor
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: horaUsuario,      // Hora real de transmisión
+        hora_tt: horaTT         // Hora tardía
       };
     }
     else {
-      // Por ahora solo implementamos "Sí transmitió" y "No transmitió"
-      console.log('DEPURACIÓN - Estado no implementado');
-      throw new Error('Estado no implementado: ' + estado);
+      // Estado Pendiente u otro
+      updateObjeto = {
+        id_reporte: id,
+        fecha: fechaFormateada,
+        estadoTransmision: "Pendiente",
+        target: null,
+        motivo: null,
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: null,
+        hora_tt: null
+      };
     }
     
     console.log('DEPURACIÓN - Objeto final para actualización:', updateObjeto);
     
-    // ===== PASO 4: Enviar actualización al backend =====
+    // ===== PASO 5: Enviar actualización al backend =====
     const response = await api.put(`${REPORTE_ENDPOINTS.UPDATE}/${id}`, updateObjeto);
     console.log('DEPURACIÓN - Respuesta del backend para actualización:', response.data);
     
     return response.data;
   } catch (error) {
     console.error('DEPURACIÓN - Error en updateReporte:', error);
-    // Mostrar más detalles del error si están disponibles
-    if (error.response) {
-      console.error('Status:', error.response.status);
-      console.error('Data:', error.response.data);
-    }
     throw error;
   }
 };
 
 /**
- * Eliminar un reporte
- */
-export const deleteReporte = async (id) => {
-  try {
-    const response = await api.delete(`${REPORTE_ENDPOINTS.DELETE}/${id}`);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Guardar o actualizar un reporte - IMPLEMENTACIÓN PARA "SÍ TRANSMITIÓ" Y "NO TRANSMITIÓ"
+ * Guardar o actualizar un reporte - IMPLEMENTACIÓN CORREGIDA
  */
 export const guardarOActualizarReporte = async (filialId, programaId, fecha, datosReporte) => {
   try {
@@ -796,24 +847,23 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
     });
     
     // ===== PASO 1: Determinar el estado =====
-    const esSiTransmitio = 
-      datosReporte.estado === 'si' || 
-      datosReporte.estadoTransmision === 'Si';
+    const estado = datosReporte.estadoTransmision || datosReporte.estado || 'Pendiente';
+    const esSiTransmitio = estado === 'Si' || estado === 'si';
+    const esNoTransmitio = estado === 'No' || estado === 'no';
+    const esTardio = estado === 'Tarde' || estado === 'tarde';
     
-    const esNoTransmitio = 
-      datosReporte.estado === 'no' || 
-      datosReporte.estadoTransmision === 'No';
-    
-    console.log('DEPURACIÓN - ¿Es "Sí transmitió"?', esSiTransmitio);
-    console.log('DEPURACIÓN - ¿Es "No transmitió"?', esNoTransmitio);
+    console.log('DEPURACIÓN - Estado determinado:', estado);
     
     // ===== PASO 2: Preparar datos según el estado =====
-    let reporteObjeto;
+    let reporteObjeto = {
+      filialId: parseInt(filialId),
+      programaId: parseInt(programaId),
+      fecha: fecha
+    };
     
     if (esSiTransmitio) {
-      // ----- Para "Sí transmitió" -----
       // Extraer la hora proporcionada por el usuario
-      let horaUsuario;
+      let horaUsuario = null;
       
       if (datosReporte.hora !== undefined) {
         horaUsuario = datosReporte.hora;
@@ -824,7 +874,6 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
       } else {
         // Solo como último recurso
         horaUsuario = "05:00";
-        console.log('DEPURACIÓN - No se encontró hora del usuario, usando valor por defecto:', horaUsuario);
       }
       
       // Asegurar que sea string
@@ -832,13 +881,9 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
         horaUsuario = String(horaUsuario);
       }
       
-      console.log('DEPURACIÓN - Hora final a usar:', horaUsuario);
-      
       // Preparar objeto para "Sí transmitió"
       reporteObjeto = {
-        filialId: parseInt(filialId),
-        programaId: parseInt(programaId),
-        fecha: fecha,
+        ...reporteObjeto,
         estadoTransmision: "Si",
         target: null,
         motivo: null,
@@ -847,32 +892,100 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
       };
     } 
     else if (esNoTransmitio) {
-      // ----- Para "No transmitió" -----
       // Extraer el target seleccionado por el usuario
       let targetUsuario = null;
+      let motivoUsuario = null;
       
-      if (datosReporte.target !== undefined) {
-        targetUsuario = datosReporte.target;
+      if (datosReporte.target !== undefined && datosReporte.target !== null) {
+        // Convertir de abreviatura (frontend) a valor completo (backend)
+        targetUsuario = convertAbbrToBackendTarget(datosReporte.target);
+        
+        // Si el target es "Otros", extraer el motivo personalizado
+        if (datosReporte.target === 'Otros') {
+          motivoUsuario = datosReporte.motivo || null;
+        }
       }
-      
-      console.log('DEPURACIÓN - Target seleccionado:', targetUsuario);
       
       // Preparar objeto para "No transmitió"
       reporteObjeto = {
-        filialId: parseInt(filialId),
-        programaId: parseInt(programaId),
-        fecha: fecha,
+        ...reporteObjeto,
         estadoTransmision: "No",
-        target: targetUsuario,  // Usar el target seleccionado
-        motivo: null,           // Siempre null según el formato del backend
-        hora: null,             // Siempre null para "No transmitió"
-        hora_tt: null           // Siempre null
+        target: targetUsuario,
+        motivo: motivoUsuario,
+        hora: null,
+        hora_tt: null
+      };
+    }
+    else if (esTardio) {
+      // Extraer hora real y hora tardía
+      let horaUsuario = null;
+      let horaTT = null;
+      let motivoUsuario = null;
+      let targetSeleccionado = null;
+      
+      // Hora real
+      if (datosReporte.hora !== undefined) {
+        horaUsuario = datosReporte.hora;
+      } else if (datosReporte.horaReal !== undefined) {
+        horaUsuario = datosReporte.horaReal;
+      } else {
+        horaUsuario = "05:00";
+      }
+      
+      // Hora tardía
+      if (datosReporte.hora_tt !== undefined) {
+        horaTT = datosReporte.hora_tt;
+      } else {
+        // Si no hay hora_tt, usar 10 minutos después de la hora real
+        const [horas, minutos] = horaUsuario.split(':').map(Number);
+        let minutosRetrasados = minutos + 10;
+        let horasRetrasadas = horas;
+        
+        if (minutosRetrasados >= 60) {
+          horasRetrasadas += 1;
+          minutosRetrasados -= 60;
+        }
+        
+        horaTT = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
+      }
+      
+      // Guardar el target seleccionado para poder usarlo como motivo
+      if (datosReporte.target) {
+        targetSeleccionado = datosReporte.target;
+      }
+      
+      // Determinar el motivo basado en el target o el motivo explícito
+      if (targetSeleccionado === 'Otros') {
+        // Si es "Otros", usar el motivo personalizado
+        motivoUsuario = datosReporte.motivo || null;
+      } else if (targetSeleccionado) {
+        // Si hay un target predefinido, usarlo como motivo
+        motivoUsuario = targetSeleccionado;
+      } else {
+        // Si no hay target, usar el motivo tal cual
+        motivoUsuario = datosReporte.motivo || null;
+      }
+      
+      // Preparar objeto para "Transmitió Tarde" - AJUSTADO AL FORMATO DEL BACKEND
+      reporteObjeto = {
+        ...reporteObjeto,
+        estadoTransmision: "Tarde",
+        target: null,            // Target siempre es null para transmisión tardía según el backend
+        motivo: motivoUsuario,   // Motivo basado en target o motivo personalizado
+        hora: horaUsuario,       // Hora real de transmisión
+        hora_tt: horaTT          // Hora tardía
       };
     }
     else {
-      // Por ahora solo implementamos "Sí transmitió" y "No transmitió"
-      console.log('DEPURACIÓN - Estado no implementado');
-      throw new Error('Por ahora, solo se han implementado los estados "Sí transmitió" y "No transmitió"');
+      // Estado Pendiente u otro
+      reporteObjeto = {
+        ...reporteObjeto,
+        estadoTransmision: "Pendiente",
+        target: null,
+        motivo: null,
+        hora: null,
+        hora_tt: null
+      };
     }
     
     console.log('DEPURACIÓN - Objeto preparado:', reporteObjeto);
@@ -1041,8 +1154,9 @@ export const getReportes = async () => {
   }
 };
 
-// Mejora para la función transformarReportes en api.js
-// Reemplaza esta función en el archivo api.js
+// src/services/api.js - FUNCIÓN transformarReportes CORREGIDA
+
+// src/services/api.js - FUNCIÓN transformarReportes CORREGIDA
 
 export const transformarReportes = (reportesBackend) => {
   console.log('DEPURACIÓN - Iniciando transformación de reportes del backend', 
@@ -1118,36 +1232,60 @@ export const transformarReportes = (reportesBackend) => {
     
     // Convertir el target del backend a la abreviatura del frontend
     let targetTransformado = null;
-    if (reporte.target) {
+    let motivoTransformado = reporte.motivo || '';
+    
+    // CASO ESPECIAL: Para "Transmitio Tarde", el target es null según el backend
+    if (estadoTransformado === 'tarde') {
+      // Verificar si el motivo coincide con alguno de los motivos predefinidos
+      const motivosPredefinidos = {
+        'Tarde': 'Tde',
+        'Tde': 'Tde',
+        'Falta': 'Fta',
+        'Fta': 'Fta',
+        'Enfermedad': 'Enf',
+        'Enf': 'Enf',
+        'Problema técnico': 'P. Tec',
+        'Problema tecnico': 'P. Tec',
+        'P. Tec': 'P. Tec',
+        'Falla de servicios': 'F. Serv',
+        'F. Serv': 'F. Serv'
+      };
+      
+      // Comprobar si el motivo coincide con alguno de los predefinidos
+      let encontrado = false;
+      if (motivoTransformado) {
+        for (const [motivoKey, targetValue] of Object.entries(motivosPredefinidos)) {
+          // Comprobar si el motivo coincide exactamente o contiene la clave
+          if (motivoTransformado === motivoKey || 
+              motivoTransformado.toLowerCase().includes(motivoKey.toLowerCase())) {
+            targetTransformado = targetValue;
+            encontrado = true;
+            // No limpiamos el motivo, lo mantenemos para referencia
+            break;
+          }
+        }
+      }
+      
+      // Si no encontramos coincidencia con los motivos predefinidos, es un motivo personalizado
+      if (!encontrado && motivoTransformado) {
+        targetTransformado = 'Otros';
+        // Mantenemos el motivo personalizado
+      } else if (!motivoTransformado) {
+        // Si no hay motivo, usamos Tde como predeterminado
+        targetTransformado = 'Tde';
+      }
+      
+      console.log('DEPURACIÓN - Reporte tarde con motivo:', motivoTransformado, 'Target asignado:', targetTransformado);
+    } 
+    // Para "No transmitió", procesar el target normalmente
+    else if (estadoTransformado === 'no' && reporte.target) {
       targetTransformado = convertBackendTargetToAbbr(reporte.target);
       console.log('DEPURACIÓN - Target convertido de backend:', reporte.target, '→', targetTransformado);
     } 
-    // Si no hay target pero hay motivo, intenta derivar el target del motivo
-    else if (reporte.motivo) {
-      // Intentar inferir target del motivo
-      const motivo = reporte.motivo.toLowerCase();
-      if (motivo.includes('enfermedad') || motivo.includes('enf')) {
-        targetTransformado = 'Enf';
-      } else if (motivo.includes('problema') || motivo.includes('tecnico') || motivo.includes('tec')) {
-        targetTransformado = 'P. Tec';
-      } else if (motivo.includes('falla') || motivo.includes('servicio')) {
-        targetTransformado = 'F. Serv';
-      } else if (motivo.includes('tarde') || motivo.includes('tde')) {
-        targetTransformado = 'Tde';
-      } else if (motivo.includes('falta') || motivo.includes('fta')) {
-        targetTransformado = 'Fta';
-      } else {
-        targetTransformado = 'Otros';
-      }
-      console.log('DEPURACIÓN - Target inferido del motivo:', motivo, '→', targetTransformado);
-    }
-    // En caso de no transmitir, asignar un target por defecto según el estado
+    // En caso de no transmitir y no tener target, asignar uno por defecto
     else if (estadoTransformado === 'no') {
       targetTransformado = 'Fta'; // Valor por defecto para "No transmitió"
       console.log('DEPURACIÓN - Asignando target por defecto para No transmitió:', targetTransformado);
-    } else if (estadoTransformado === 'tarde') {
-      targetTransformado = 'Tde'; // Valor por defecto para "Transmitió Tarde"
-      console.log('DEPURACIÓN - Asignando target por defecto para Transmitió Tarde:', targetTransformado);
     }
     
     // Incluir los nuevos campos hora_tt y target
@@ -1157,7 +1295,7 @@ export const transformarReportes = (reportesBackend) => {
       programaId: programaId,
       fecha: fechaTransformada,
       estado: estadoTransformado,
-      motivo: reporte.motivo || '',
+      motivo: motivoTransformado,
       horaReal: horaReal,
       hora_tt: horaTT,
       target: targetTransformado,
@@ -1167,14 +1305,6 @@ export const transformarReportes = (reportesBackend) => {
       createdAt: reporte.createdAt,
       updateAt: reporte.updateAt
     };
-    
-    // Log para diagnóstico
-    if (process.env.NODE_ENV !== 'production' && reporte.target) {
-      console.log('DIAGNÓSTICO - Target en reporte:', {
-        original: reporte.target,
-        transformado: targetTransformado
-      });
-    }
     
     console.log('DEPURACIÓN - Reporte transformado final:', reporteTransformado);
     return reporteTransformado;
