@@ -301,12 +301,64 @@ export const crearProgramaCompleto = async (datosPrograma) => {
 // ==================== UTILIDADES PARA CONVERSIONES ====================
 
 /**
- * Convertir fecha de YYYY-MM-DD a DD/MM/YYYY (formato Backend)
+ * Convertir fecha de YYYY-MM-DD a DD/MM/YYYY (formato Backend) - CORREGIDA
+ * Maneja múltiples formatos de entrada
  */
-export const convertirFechaASwagger = (fechaISO) => {
-  if (!fechaISO) return '';
-  const [year, month, day] = fechaISO.split('-');
-  return `${day}/${month}/${year}`;
+export const convertirFechaASwagger = (fechaInput) => {
+  console.log('DEPURACIÓN - convertirFechaASwagger - Entrada:', fechaInput);
+  
+  // Si es null o undefined, usar fecha actual
+  if (!fechaInput) {
+    const hoy = new Date();
+    const dia = String(hoy.getDate()).padStart(2, '0');
+    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+    const año = hoy.getFullYear();
+    console.log(`DEPURACIÓN - Usando fecha actual: ${dia}/${mes}/${año}`);
+    return `${dia}/${mes}/${año}`;
+  }
+  
+  // Si es objeto Date, convertir a formato DD/MM/YYYY
+  if (fechaInput instanceof Date) {
+    const dia = String(fechaInput.getDate()).padStart(2, '0');
+    const mes = String(fechaInput.getMonth() + 1).padStart(2, '0');
+    const año = fechaInput.getFullYear();
+    console.log(`DEPURACIÓN - Convertido desde Date: ${dia}/${mes}/${año}`);
+    return `${dia}/${mes}/${año}`;
+  }
+  
+  // Si ya está en formato DD/MM/YYYY, devolverlo tal cual
+  if (typeof fechaInput === 'string' && fechaInput.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+    console.log('DEPURACIÓN - Ya está en formato DD/MM/YYYY:', fechaInput);
+    return fechaInput;
+  }
+  
+  // Si está en formato YYYY-MM-DD (ISO)
+  if (typeof fechaInput === 'string' && fechaInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const [year, month, day] = fechaInput.split('-');
+    console.log(`DEPURACIÓN - Convertido desde YYYY-MM-DD: ${day}/${month}/${year}`);
+    return `${day}/${month}/${year}`;
+  }
+  
+  // Si está en otro formato de string, intentar convertirlo
+  if (typeof fechaInput === 'string') {
+    try {
+      // Intentar analizar como fecha y convertir
+      const fecha = new Date(fechaInput);
+      if (!isNaN(fecha.getTime())) {
+        const dia = String(fecha.getDate()).padStart(2, '0');
+        const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+        const año = fecha.getFullYear();
+        console.log(`DEPURACIÓN - Convertido desde string genérico: ${dia}/${mes}/${año}`);
+        return `${dia}/${mes}/${año}`;
+      }
+    } catch (error) {
+      console.warn('DEPURACIÓN - Error al convertir string a fecha:', error);
+    }
+  }
+  
+  // Si nada funciona, devolver el input original con advertencia
+  console.warn('DEPURACIÓN - No se pudo convertir la fecha, devolviendo original:', fechaInput);
+  return fechaInput;
 };
 
 /**
@@ -322,12 +374,24 @@ export const convertirFechaDesdeSwagger = (fechaSwagger) => {
  * Convertir estado del frontend al enum EstadoTransmision del backend
  */
 export const convertirEstadoAEnum = (estado) => {
-  switch (estado) {
-    case 'si': return 'Si';
-    case 'no': return 'No';
-    case 'tarde': return 'Tarde';
-    case 'pendiente': return 'Pendiente';
-    default: return 'Pendiente';
+  if (!estado) return 'Pendiente';
+  
+  // Normalizar el estado a minúsculas para comparación
+  const estadoLower = estado.toLowerCase();
+  
+  switch (estadoLower) {
+    case 'si':
+      return 'Si'; // Importante: el backend espera "Si" con mayúscula inicial
+    case 'no':
+      return 'No'; // Importante: el backend espera "No" con mayúscula inicial
+    case 'tarde':
+      return 'Tarde'; // Importante: el backend espera "Tarde" con mayúscula inicial
+    case 'pendiente':
+      return 'Pendiente'; // Importante: el backend espera "Pendiente" con mayúscula inicial
+    default:
+      // Log de depuración para estado no reconocido
+      console.warn('DEPURACIÓN - Estado no reconocido:', estado);
+      return 'Pendiente';
   }
 };
 
@@ -397,77 +461,275 @@ export const getReportePorId = async (id) => {
 };
 
 /**
- * Crear un nuevo reporte
+ * Crear un nuevo reporte - IMPLEMENTACIÓN PARA "SÍ TRANSMITIÓ" Y "NO TRANSMITIÓ"
  */
 export const createReporte = async (reporteData) => {
   try {
     console.log('DEPURACIÓN - API - Datos recibidos en createReporte:', reporteData);
     
-    // Asegurarse de que hora_real esté presente y sea un string válido
-    const horaReal = reporteData.hora_real || reporteData.horaReal || "05:00";
-    console.log('DEPURACIÓN - API - Hora real utilizada:', horaReal);
+    // ===== PASO 1: Determinar el estado =====
+    const estado = reporteData.estadoTransmision || reporteData.estado || 'Pendiente';
+    const esSiTransmitio = estado === 'Si' || estado === 'si';
+    const esNoTransmitio = estado === 'No' || estado === 'no';
     
-    const reporte = {
-      fecha: convertirFechaASwagger(reporteData.fecha),
-      hora_real: horaReal, 
-      motivo: reporteData.motivo || null,               
-      estadoTransmision: convertirEstadoAEnum(reporteData.estadoTransmision),
-      filialId: reporteData.filialId,                   
-      programaId: reporteData.programaId,
-      // Nuevos campos
-      hora_tt: reporteData.hora_tt || null,
-      target: reporteData.target || null
-    };
-
-    // Log para debugging - Este es el objeto que se enviará al backend
-    console.log('DEPURACIÓN - API - Objeto final enviado al backend:', reporte);
-
-    // Validación extra
-    if (!reporte.fecha) {
-      throw new Error('Campo obligatorio faltante: fecha');
-    }
-
-    if (typeof reporte.filialId !== 'number' || typeof reporte.programaId !== 'number') {
-      throw new Error('filialId y programaId deben ser números');
+    console.log('DEPURACIÓN - Estado determinado:', estado);
+    console.log('DEPURACIÓN - ¿Es "Sí transmitió"?', esSiTransmitio);
+    console.log('DEPURACIÓN - ¿Es "No transmitió"?', esNoTransmitio);
+    
+    // ===== PASO 2: Extraer la hora del usuario (solo para "Sí transmitió") =====
+    let horaUsuario = null;
+    
+    if (esSiTransmitio) {
+      if (reporteData.hora !== undefined) {
+        horaUsuario = reporteData.hora;
+      } else if (reporteData.horaReal !== undefined) {
+        horaUsuario = reporteData.horaReal;
+      } else if (reporteData.hora_real !== undefined) {
+        horaUsuario = reporteData.hora_real;
+      } else {
+        // Solo en caso de no encontrar ningún valor
+        horaUsuario = "05:00";
+        console.log('DEPURACIÓN - No se encontró hora del usuario, usando valor por defecto:', horaUsuario);
+      }
+      
+      // Asegurar que la hora sea string
+      if (typeof horaUsuario !== 'string') {
+        horaUsuario = String(horaUsuario);
+      }
+      
+      console.log('DEPURACIÓN - Hora final a usar:', horaUsuario);
     }
     
-    // Antes de enviar al backend, comprobamos que hora_real sea un string
-    if (reporte.hora_real && typeof reporte.hora_real !== 'string') {
-      console.warn('DEPURACIÓN - API - hora_real no es string, convirtiendo:', reporte.hora_real);
-      reporte.hora_real = String(reporte.hora_real);
+    // ===== PASO 3: Extraer target/motivo (solo para "No transmitió") =====
+    let targetUsuario = null;
+    
+    if (esNoTransmitio) {
+      // Para No transmitió, usamos el target seleccionado
+      if (reporteData.target !== undefined && reporteData.target !== null) {
+        targetUsuario = reporteData.target;
+        console.log('DEPURACIÓN - Target seleccionado:', targetUsuario);
+      }
     }
     
-    const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporte]);
-    console.log('DEPURACIÓN - API - Respuesta del backend:', response.data);
+    // ===== PASO 4: Formatear la fecha correctamente =====
+    let fechaFormateada;
+    
+    if (typeof reporteData.fecha === 'string') {
+      if (reporteData.fecha.includes('/')) {
+        // Ya está en formato DD/MM/YYYY
+        fechaFormateada = reporteData.fecha;
+      } else if (reporteData.fecha.includes('-')) {
+        // Convertir de YYYY-MM-DD a DD/MM/YYYY
+        const [year, month, day] = reporteData.fecha.split('-');
+        fechaFormateada = `${day}/${month}/${year}`;
+      } else {
+        // Intentar como fecha genérica
+        const fecha = new Date(reporteData.fecha);
+        const day = String(fecha.getDate()).padStart(2, '0');
+        const month = String(fecha.getMonth() + 1).padStart(2, '0');
+        const year = fecha.getFullYear();
+        fechaFormateada = `${day}/${month}/${year}`;
+      }
+    } else if (reporteData.fecha instanceof Date) {
+      // Convertir desde objeto Date
+      const day = String(reporteData.fecha.getDate()).padStart(2, '0');
+      const month = String(reporteData.fecha.getMonth() + 1).padStart(2, '0');
+      const year = reporteData.fecha.getFullYear();
+      fechaFormateada = `${day}/${month}/${year}`;
+    } else {
+      // Usar fecha actual como último recurso
+      const hoy = new Date();
+      const day = String(hoy.getDate()).padStart(2, '0');
+      const month = String(hoy.getMonth() + 1).padStart(2, '0');
+      const year = hoy.getFullYear();
+      fechaFormateada = `${day}/${month}/${year}`;
+    }
+    
+    console.log('DEPURACIÓN - Fecha formateada:', fechaFormateada);
+    
+    // ===== PASO 5: Crear el objeto según el estado =====
+    let reporteObjeto;
+    
+    if (esSiTransmitio) {
+      // Objeto para "Sí transmitió"
+      reporteObjeto = {
+        fecha: fechaFormateada,
+        estadoTransmision: "Si",
+        target: null,
+        motivo: null,
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: horaUsuario,
+        hora_tt: null
+      };
+    } 
+    else if (esNoTransmitio) {
+      // Objeto para "No transmitió"
+      reporteObjeto = {
+        fecha: fechaFormateada,
+        estadoTransmision: "No",
+        target: targetUsuario,  // Usa el target seleccionado
+        motivo: null,           // Motivo null según formato del backend
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: null,             // Para "No transmitió", la hora es null
+        hora_tt: null
+      };
+    }
+    else {
+      // Por ahora solo implementamos "Sí transmitió" y "No transmitió"
+      throw new Error('Estado no implementado: ' + estado);
+    }
+    
+    // ===== PASO 6: Enviar al backend como array =====
+    console.log('DEPURACIÓN - Objeto final a enviar:', reporteObjeto);
+    
+    // IMPORTANTE: Enviar como array con un solo objeto
+    const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporteObjeto]);
+    console.log('DEPURACIÓN - Respuesta del backend:', response.data);
     
     return Array.isArray(response.data) ? response.data[0] : response.data;
   } catch (error) {
-    console.error('DEPURACIÓN - API - Error en createReporte:', error);
+    console.error('DEPURACIÓN - Error en createReporte:', error);
+    // Mostrar más detalles del error si están disponibles
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Data:', error.response.data);
+    }
     throw error;
   }
 };
 
+
 /**
- * Actualizar un reporte existente
+ * Actualizar un reporte existente - IMPLEMENTACIÓN PARA "SÍ TRANSMITIÓ" Y "NO TRANSMITIÓ"
  */
 export const updateReporte = async (id, reporteData) => {
   try {
-    const reporte = {
-      id_reporte: id,
-      fecha: convertirFechaASwagger(reporteData.fecha),
-      hora_real: reporteData.hora_real || reporteData.horaReal || "05:00",
-      motivo: reporteData.motivo || "OK",
-      estadoTransmision: convertirEstadoAEnum(reporteData.estadoTransmision),
-      filialId: reporteData.filialId,
-      programaId: reporteData.programaId,
-      // Nuevos campos
-      hora_tt: reporteData.hora_tt || null,
-      target: reporteData.target || null
-    };
+    console.log('DEPURACIÓN - Actualizando reporte ID:', id, 'con datos:', reporteData);
     
-    const response = await api.put(`${REPORTE_ENDPOINTS.UPDATE}/${id}`, reporte);
+    // ===== PASO 1: Determinar el estado =====
+    const estado = reporteData.estadoTransmision || 'Pendiente';
+    const esSiTransmitio = estado === 'Si' || estado === 'si';
+    const esNoTransmitio = estado === 'No' || estado === 'no';
+    
+    console.log('DEPURACIÓN - Estado determinado:', estado);
+    console.log('DEPURACIÓN - ¿Es "Sí transmitió"?', esSiTransmitio);
+    console.log('DEPURACIÓN - ¿Es "No transmitió"?', esNoTransmitio);
+    
+    // ===== PASO 2: Formatear fecha si es necesario =====
+    let fechaFormateada;
+    
+    if (typeof reporteData.fecha === 'string') {
+      if (reporteData.fecha.includes('/')) {
+        // Ya está en formato DD/MM/YYYY
+        fechaFormateada = reporteData.fecha;
+      } else {
+        // Intentar convertir
+        try {
+          fechaFormateada = convertirFechaASwagger(reporteData.fecha);
+        } catch (e) {
+          console.error('Error al convertir fecha:', e);
+          fechaFormateada = reporteData.fecha; // Usar la original
+        }
+      }
+    } else if (reporteData.fecha instanceof Date) {
+      // Convertir objeto Date
+      const day = String(reporteData.fecha.getDate()).padStart(2, '0');
+      const month = String(reporteData.fecha.getMonth() + 1).padStart(2, '0');
+      const year = reporteData.fecha.getFullYear();
+      fechaFormateada = `${day}/${month}/${year}`;
+    } else {
+      // Usar la fecha tal cual
+      fechaFormateada = reporteData.fecha;
+    }
+    
+    console.log('DEPURACIÓN - Fecha formateada:', fechaFormateada);
+    
+    // ===== PASO 3: Crear objeto de actualización según el estado =====
+    let updateObjeto;
+    
+    if (esSiTransmitio) {
+      // ----- Para "Sí transmitió" -----
+      // Extraer hora
+      let horaUsuario;
+      
+      if (reporteData.hora !== undefined) {
+        horaUsuario = reporteData.hora;
+      } else if (reporteData.horaReal !== undefined) {
+        horaUsuario = reporteData.horaReal;
+      } else if (reporteData.hora_real !== undefined) {
+        horaUsuario = reporteData.hora_real;
+      } else {
+        // Solo como último recurso
+        horaUsuario = "05:00";
+        console.log('DEPURACIÓN - No se encontró hora del usuario, usando valor por defecto:', horaUsuario);
+      }
+      
+      // Asegurar que sea string
+      if (typeof horaUsuario !== 'string') {
+        horaUsuario = String(horaUsuario);
+      }
+      
+      console.log('DEPURACIÓN - Hora final a usar:', horaUsuario);
+      
+      // Objeto para "Sí transmitió"
+      updateObjeto = {
+        id_reporte: id,
+        fecha: fechaFormateada,
+        estadoTransmision: "Si",
+        target: null,
+        motivo: null,
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: horaUsuario,
+        hora_tt: null
+      };
+    } 
+    else if (esNoTransmitio) {
+      // ----- Para "No transmitió" -----
+      // Extraer target
+      let targetUsuario = null;
+      
+      if (reporteData.target !== undefined) {
+        targetUsuario = reporteData.target;
+      }
+      
+      console.log('DEPURACIÓN - Target seleccionado:', targetUsuario);
+      
+      // Objeto para "No transmitió"
+      updateObjeto = {
+        id_reporte: id,
+        fecha: fechaFormateada,
+        estadoTransmision: "No",
+        target: targetUsuario,  // Target seleccionado
+        motivo: null,           // Siempre null
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: null,             // Siempre null
+        hora_tt: null           // Siempre null
+      };
+    }
+    else {
+      // Por ahora solo implementamos "Sí transmitió" y "No transmitió"
+      console.log('DEPURACIÓN - Estado no implementado');
+      throw new Error('Estado no implementado: ' + estado);
+    }
+    
+    console.log('DEPURACIÓN - Objeto final para actualización:', updateObjeto);
+    
+    // ===== PASO 4: Enviar actualización al backend =====
+    const response = await api.put(`${REPORTE_ENDPOINTS.UPDATE}/${id}`, updateObjeto);
+    console.log('DEPURACIÓN - Respuesta del backend para actualización:', response.data);
+    
     return response.data;
   } catch (error) {
+    console.error('DEPURACIÓN - Error en updateReporte:', error);
+    // Mostrar más detalles del error si están disponibles
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Data:', error.response.data);
+    }
     throw error;
   }
 };
@@ -485,47 +747,112 @@ export const deleteReporte = async (id) => {
 };
 
 /**
- * Guardar o actualizar un reporte
+ * Guardar o actualizar un reporte - IMPLEMENTACIÓN PARA "SÍ TRANSMITIÓ" Y "NO TRANSMITIÓ"
  */
 export const guardarOActualizarReporte = async (filialId, programaId, fecha, datosReporte) => {
   try {
-    console.log('DEPURACIÓN - API - Datos recibidos en guardarOActualizarReporte:', {
+    console.log('DEPURACIÓN - Datos recibidos en guardarOActualizarReporte:', {
       filialId, programaId, fecha, datosReporte
     });
     
-    // Extraer la hora real de todas las posibles fuentes
-    const horaReal = datosReporte.horaReal || datosReporte.hora_real || "05:00";
-    console.log('DEPURACIÓN - API - Hora real extraída:', horaReal);
+    // ===== PASO 1: Determinar el estado =====
+    const esSiTransmitio = 
+      datosReporte.estado === 'si' || 
+      datosReporte.estadoTransmision === 'Si';
     
-    const reporteData = {
-      filialId: filialId,
-      programaId: programaId,
-      fecha: fecha,
-      estadoTransmision: datosReporte.estado || 'pendiente',
-      motivo: datosReporte.motivo || null,
-      hora_real: horaReal,
-      observaciones: datosReporte.observaciones || null,
-      // Nuevos campos
-      hora_tt: datosReporte.hora_tt || null,
-      target: datosReporte.target || null
-    };
+    const esNoTransmitio = 
+      datosReporte.estado === 'no' || 
+      datosReporte.estadoTransmision === 'No';
     
-    console.log('DEPURACIÓN - API - Objeto preparado para enviar:', reporteData);
+    console.log('DEPURACIÓN - ¿Es "Sí transmitió"?', esSiTransmitio);
+    console.log('DEPURACIÓN - ¿Es "No transmitió"?', esNoTransmitio);
     
-    // Si tenemos un ID, actualizar; si no, crear nuevo
+    // ===== PASO 2: Preparar datos según el estado =====
+    let reporteObjeto;
+    
+    if (esSiTransmitio) {
+      // ----- Para "Sí transmitió" -----
+      // Extraer la hora proporcionada por el usuario
+      let horaUsuario;
+      
+      if (datosReporte.hora !== undefined) {
+        horaUsuario = datosReporte.hora;
+      } else if (datosReporte.horaReal !== undefined) {
+        horaUsuario = datosReporte.horaReal;
+      } else if (datosReporte.hora_real !== undefined) {
+        horaUsuario = datosReporte.hora_real;
+      } else {
+        // Solo como último recurso
+        horaUsuario = "05:00";
+        console.log('DEPURACIÓN - No se encontró hora del usuario, usando valor por defecto:', horaUsuario);
+      }
+      
+      // Asegurar que sea string
+      if (typeof horaUsuario !== 'string') {
+        horaUsuario = String(horaUsuario);
+      }
+      
+      console.log('DEPURACIÓN - Hora final a usar:', horaUsuario);
+      
+      // Preparar objeto para "Sí transmitió"
+      reporteObjeto = {
+        filialId: parseInt(filialId),
+        programaId: parseInt(programaId),
+        fecha: fecha,
+        estadoTransmision: "Si",
+        target: null,
+        motivo: null,
+        hora: horaUsuario,
+        hora_tt: null
+      };
+    } 
+    else if (esNoTransmitio) {
+      // ----- Para "No transmitió" -----
+      // Extraer el target seleccionado por el usuario
+      let targetUsuario = null;
+      
+      if (datosReporte.target !== undefined) {
+        targetUsuario = datosReporte.target;
+      }
+      
+      console.log('DEPURACIÓN - Target seleccionado:', targetUsuario);
+      
+      // Preparar objeto para "No transmitió"
+      reporteObjeto = {
+        filialId: parseInt(filialId),
+        programaId: parseInt(programaId),
+        fecha: fecha,
+        estadoTransmision: "No",
+        target: targetUsuario,  // Usar el target seleccionado
+        motivo: null,           // Siempre null según el formato del backend
+        hora: null,             // Siempre null para "No transmitió"
+        hora_tt: null           // Siempre null
+      };
+    }
+    else {
+      // Por ahora solo implementamos "Sí transmitió" y "No transmitió"
+      console.log('DEPURACIÓN - Estado no implementado');
+      throw new Error('Por ahora, solo se han implementado los estados "Sí transmitió" y "No transmitió"');
+    }
+    
+    console.log('DEPURACIÓN - Objeto preparado:', reporteObjeto);
+    
+    // ===== PASO 3: Decidir entre crear o actualizar =====
     if (datosReporte.id_reporte) {
-      console.log('DEPURACIÓN - API - Actualizando reporte existente:', datosReporte.id_reporte);
-      return await updateReporte(datosReporte.id_reporte, reporteData);
+      console.log('DEPURACIÓN - Actualizando reporte existente ID:', datosReporte.id_reporte);
+      return await updateReporte(datosReporte.id_reporte, reporteObjeto);
     } else {
-      console.log('DEPURACIÓN - API - Creando nuevo reporte');
-      return await createReporte(reporteData);
+      console.log('DEPURACIÓN - Creando nuevo reporte');
+      return await createReporte(reporteObjeto);
     }
     
   } catch (error) {
-    console.error('DEPURACIÓN - API - Error en guardarOActualizarReporte:', error);
+    console.error('DEPURACIÓN - Error en guardarOActualizarReporte:', error);
     throw error;
   }
 };
+
+
 
 export const inspeccionarReporteBackend = async (reporteId) => {
   try {
@@ -678,6 +1005,9 @@ export const getReportes = async () => {
  /**
  * Transformar reportes del backend
  */
+/**
+ * Transformar reportes del backend
+ */
 export const transformarReportes = (reportesBackend) => {
   return reportesBackend.map(reporte => {
     // Priorizar campos directos filialId y programaId
@@ -721,8 +1051,23 @@ export const transformarReportes = (reportesBackend) => {
       }
     }
     
-    // Buscar hora con diferentes nombres
-    const horaReal = reporte.hora_real || reporte.hora || reporte.horaReal || '';
+    // Buscar hora real con diferentes nombres y asegurarse que es un string
+    let horaReal = reporte.hora_real || reporte.hora || reporte.horaReal || '';
+    
+    // Normalizar hora_real si viene como objeto (para compatibilidad con API)
+    if (typeof horaReal === 'object' && horaReal !== null) {
+      const hour = horaReal.hour || 0;
+      const minute = horaReal.minute || 0;
+      horaReal = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    }
+    
+    // Asegurar que hora_tt también sea string
+    let horaTT = reporte.hora_tt || '';
+    if (typeof horaTT === 'object' && horaTT !== null) {
+      const hour = horaTT.hour || 0;
+      const minute = horaTT.minute || 0;
+      horaTT = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    }
     
     // Incluir los nuevos campos hora_tt y target
     const reporteTransformado = {
@@ -733,14 +1078,31 @@ export const transformarReportes = (reportesBackend) => {
       estado: estadoTransformado,
       motivo: reporte.motivo || '',
       horaReal: horaReal,
-      hora_tt: reporte.hora_tt || '', // Nuevo campo
-      target: reporte.target || '',   // Nuevo campo
+      hora_tt: horaTT,
+      target: reporte.target || '',
       observaciones: reporte.observaciones || '',
       estadoTransmision: reporte.estadoTransmision,
       isActivo: reporte.isActivo,
       createdAt: reporte.createdAt,
       updateAt: reporte.updateAt
     };
+    
+    // Log para diagnóstico
+    if (process.env.NODE_ENV !== 'production' && reporte.hora_real) {
+      console.log('DIAGNÓSTICO - Transformación de reporte:', {
+        original: {
+          id: reporte.id_reporte || reporte.id,
+          estado: reporte.estadoTransmision,
+          hora_real_original: reporte.hora_real,
+          hora_real_tipo: typeof reporte.hora_real
+        },
+        transformado: {
+          estado: reporteTransformado.estado,
+          horaReal: reporteTransformado.horaReal,
+          horaReal_tipo: typeof reporteTransformado.horaReal
+        }
+      });
+    }
     
     return reporteTransformado;
   });

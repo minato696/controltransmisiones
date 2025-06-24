@@ -154,7 +154,7 @@ const TransmissionTracker = ({
     abrirModalNotas(filial, nota, semana);
   };
 
-  const guardarReporte = async () => {
+const guardarReporte = async () => {
   if (!reporteSeleccionado) return;
   
   try {
@@ -181,22 +181,47 @@ const TransmissionTracker = ({
       }
       
       // Para "Sí transmitió" solo enviamos estado y hora real
+      // IMPORTANTE: no enviamos null, sino string vacío para motivo
       datosReporte.hora_tt = null;
       datosReporte.target = null;
-      datosReporte.motivo = null;
+      datosReporte.motivo = "";
     } 
     // Si es "No transmitió", enviar estado y target como motivo
     else if (reporteSeleccionado.estado === 'no') {
       datosReporte.horaReal = null;
       datosReporte.hora_tt = null;
-      // Si el target es "Otros", usar el motivo, sino usar el target como motivo
+      
+      // Si el target es "Otros", mantener el motivo personalizado
+      // Si no, usar el target como motivo
       if (reporteSeleccionado.target === 'Otros') {
-        // Mantener el motivo personalizado
+        // Ya tiene motivo personalizado, asegurar que no sea null
+        datosReporte.motivo = datosReporte.motivo || "";
       } else {
-        datosReporte.motivo = reporteSeleccionado.target;
+        datosReporte.motivo = reporteSeleccionado.target || "";
       }
     }
     // Si es "Transmitio Tarde", enviar todos los campos
+    else if (reporteSeleccionado.estado === 'tarde') {
+      // Asegurar que horaReal está presente
+      if (!datosReporte.horaReal) {
+        const programaActual = programas.find(p => p.id === reporteSeleccionado.programaId);
+        datosReporte.horaReal = programaActual?.horario || "05:00";
+      }
+      
+      // Asegurar que hora_tt está presente
+      if (!datosReporte.hora_tt) {
+        datosReporte.hora_tt = datosReporte.horaReal;
+      }
+      
+      // Si el target es "Otros", mantener el motivo personalizado
+      // Si no, usar el target como motivo
+      if (reporteSeleccionado.target === 'Otros') {
+        // Ya tiene motivo personalizado, asegurar que no sea null
+        datosReporte.motivo = datosReporte.motivo || "";
+      } else {
+        datosReporte.motivo = reporteSeleccionado.target || "";
+      }
+    }
     
     // Log de lo que vamos a enviar después de los ajustes
     console.log('DEPURACIÓN - FRONTEND - Datos ajustados para enviar:');
@@ -218,9 +243,31 @@ const TransmissionTracker = ({
     setReporteSeleccionado(null);
   } catch (error) {
     console.error('DEPURACIÓN - Error al guardar reporte:', error);
-    alert(error.message);
+    
+    // Mensaje de error más descriptivo y amigable
+    let mensajeError = 'Error al guardar el reporte.';
+    
+    if (error.response) {
+      if (error.response.status === 500) {
+        mensajeError = 'Error interno del servidor. El formato de datos puede no ser compatible con el backend.';
+      } else if (error.response.status === 400) {
+        mensajeError = 'Datos incorrectos. Verifica los campos requeridos e intenta de nuevo.';
+      } else if (error.response.status === 404) {
+        mensajeError = 'No se encontró el recurso en el servidor.';
+      }
+      
+      // Si hay mensaje detallado del servidor, mostrarlo
+      if (error.response.data && error.response.data.message) {
+        mensajeError += `\n\nDetalle: ${error.response.data.message}`;
+      }
+    } else if (error.message) {
+      mensajeError = error.message;
+    }
+    
+    alert(mensajeError);
   }
 };
+
 
   const guardarNotaGeneral = async () => {
     if (!notaSeleccionada) return;
