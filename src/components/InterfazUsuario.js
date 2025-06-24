@@ -1,4 +1,5 @@
 // src/components/InterfazUsuario.js
+import { targetOptions, convertBackendTargetToAbbr, convertAbbrToBackendTarget } from '../utils/targetMapping';
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, CheckCircle, XCircle, AlertCircle, Search, 
@@ -428,10 +429,7 @@ export const TooltipReporte = ({ tooltip }) => {
   );
 };
 
-// ==================== COMPONENTE MODAL DE REPORTE - ACTUALIZADO ====================
-
-// ==================== COMPONENTE MODAL DE REPORTE - ACTUALIZADO ====================
-
+// src/components/InterfazUsuario.js - Componente ModalReporte Actualizado
 export const ModalReporte = ({ 
   mostrarModal, 
   setMostrarModal, 
@@ -446,6 +444,55 @@ export const ModalReporte = ({
 }) => {
   // Validación temprana pero no return para evitar conflicto con useEffect
   const modalVisible = mostrarModal && reporteSeleccionado;
+  
+  // Función para depuración de target
+  const debugTarget = (target) => {
+    console.log('===== DEPURACIÓN DE TARGET =====');
+    console.log('Target a analizar:', target);
+    console.log('Tipo de dato:', typeof target);
+    
+    if (target) {
+      // Verificar si ya es una abreviatura del frontend
+      const esAbreviatura = targetOptions.some(opt => opt.value === target);
+      console.log('¿Es ya una abreviatura?', esAbreviatura ? 'Sí' : 'No');
+      
+      // Intentar convertir de backend a frontend
+      if (!esAbreviatura) {
+        const convertido = convertBackendTargetToAbbr(target);
+        console.log('Intento de conversión Backend→Frontend:', target, '→', convertido);
+        console.log('¿Conversión exitosa?', convertido !== target ? 'Sí' : 'No');
+      }
+    }
+    
+    console.log('================================');
+  };
+
+  // useEffect para procesar el target cuando se abre el modal
+  useEffect(() => {
+    if (mostrarModal && reporteSeleccionado) {
+      console.log('DEPURACIÓN - Modal abierto con reporte:', reporteSeleccionado);
+      
+      // Verificar el target original
+      if (reporteSeleccionado.target) {
+        debugTarget(reporteSeleccionado.target);
+        
+        // Verificamos si el target NO es una abreviatura (si no es alguno de los valores en targetOptions)
+        const esAbreviatura = targetOptions.some(opt => opt.value === reporteSeleccionado.target);
+        
+        if (!esAbreviatura) {
+          // Es un valor del backend, necesitamos convertirlo
+          const targetAbreviado = convertBackendTargetToAbbr(reporteSeleccionado.target);
+          console.log('DEPURACIÓN - Convirtiendo target a abreviatura:', reporteSeleccionado.target, '→', targetAbreviado);
+          
+          // Actualizamos el reporte con la abreviatura
+          setReporteSeleccionado(prev => ({
+            ...prev,
+            target: targetAbreviado
+          }));
+        }
+      }
+    }
+  }, [mostrarModal, reporteSeleccionado, setReporteSeleccionado]);
 
   // useEffect para establecer valor predeterminado de horaReal
   useEffect(() => {
@@ -470,16 +517,6 @@ export const ModalReporte = ({
 
   // No mostrar nada si el modal no está visible
   if (!modalVisible) return null;
-
-  // Opciones de target para los estados "no" y "tarde"
-  const targetOptions = [
-    { value: "Tde", label: "Tarde (Tde)" },
-    { value: "Fta", label: "Falta (Fta)" },
-    { value: "Enf", label: "Enfermedad (Enf)" },
-    { value: "P. Tec", label: "Problema técnico (P. Tec)" },
-    { value: "F. Serv", label: "Falla de servicios (F. Serv)" },
-    { value: "Otros", label: "Otros" }
-  ];
 
   // Obtener nombres de filial y programa
   const filialNombre = filiales.find(f => f.id === reporteSeleccionado.filialId)?.nombre || '';
@@ -519,7 +556,7 @@ export const ModalReporte = ({
         ...reporteSeleccionado,
         estado: nuevoEstado,
         hora_tt: reporteSeleccionado.hora_tt || horaPrograma,
-        target: reporteSeleccionado.target || "Tde"
+        target: reporteSeleccionado.target || "Tde" // Abreviatura para Tarde
       });
     }
     // Cuando cambia a estado "no", establecer target predeterminado
@@ -529,7 +566,7 @@ export const ModalReporte = ({
         estado: nuevoEstado,
         horaReal: null,
         hora_tt: null,
-        target: reporteSeleccionado.target || "Fta"
+        target: reporteSeleccionado.target || "Fta" // Abreviatura para Falta
       });
     }
     else {
@@ -544,6 +581,8 @@ export const ModalReporte = ({
   // Handler para cambio de target
   const handleTargetChange = (e) => {
     const nuevoTarget = e.target.value;
+    console.log('DEPURACIÓN - Target seleccionado:', nuevoTarget);
+    
     setReporteSeleccionado({
       ...reporteSeleccionado,
       target: nuevoTarget,
@@ -566,6 +605,7 @@ export const ModalReporte = ({
             </div>
           </div>
           
+          {/* Información del reporte */}
           <div className="mb-4">
             <p className="text-sm text-gray-600 mb-2">
               <strong>Ciudad:</strong> {filialNombre}
@@ -579,6 +619,15 @@ export const ModalReporte = ({
             <p className="text-sm text-gray-600 mb-4">
               <strong>Fecha:</strong> {formatearFecha(reporteSeleccionado.fecha)}
             </p>
+            
+            {/* Información de depuración (visible solo en desarrollo) */}
+            {process.env.NODE_ENV !== 'production' && (
+              <div className="p-2 bg-gray-100 rounded-md text-xs text-gray-600 mb-4">
+                <p><strong>Debug:</strong> Target={reporteSeleccionado.target || 'null'}</p>
+                <p>Estado={reporteSeleccionado.estado || 'null'}</p>
+                <p>ID={reporteSeleccionado.id_reporte || 'nuevo'}</p>
+              </div>
+            )}
           </div>
 
           <div className="mb-4">
@@ -659,14 +708,19 @@ export const ModalReporte = ({
                   Motivo
                 </label>
                 <select
-                  value={reporteSeleccionado.target || 'Tde'}
+                  value={reporteSeleccionado.target || ''}
                   onChange={handleTargetChange}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
+                  <option value="" disabled>Seleccione un motivo</option>
                   {targetOptions.map(option => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
+                {/* Campo para depuración */}
+                <div className="text-xs text-gray-400 mt-1">
+                  Target seleccionado: {reporteSeleccionado.target || "No seleccionado"}
+                </div>
               </div>
 
               {reporteSeleccionado.target === 'Otros' && (
@@ -697,14 +751,21 @@ export const ModalReporte = ({
                   Motivo
                 </label>
                 <select
-                  value={reporteSeleccionado.target || 'Fta'}
+                  value={reporteSeleccionado.target || ''}
                   onChange={handleTargetChange}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
+                  <option value="" disabled>Seleccione un motivo</option>
                   {targetOptions.map(option => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
+                {/* Información de depuración */}
+                <div className="text-xs text-gray-400 mt-1">
+                  Target seleccionado: {reporteSeleccionado.target || "No seleccionado"} 
+                  {reporteSeleccionado.target && !targetOptions.find(opt => opt.value === reporteSeleccionado.target) && 
+                    " (¡Valor no encontrado en opciones!)"}
+                </div>
               </div>
 
               {reporteSeleccionado.target === 'Otros' && (

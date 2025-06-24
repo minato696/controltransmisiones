@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { convertAbbrToBackendTarget, convertBackendTargetToAbbr } from '../utils/targetMapping';
 
 // Configuración base
 const API_BASE_URL = 'http://192.168.10.213:5886';
@@ -471,15 +472,17 @@ export const createReporte = async (reporteData) => {
     const estado = reporteData.estadoTransmision || reporteData.estado || 'Pendiente';
     const esSiTransmitio = estado === 'Si' || estado === 'si';
     const esNoTransmitio = estado === 'No' || estado === 'no';
+    const esTardio = estado === 'Tarde' || estado === 'tarde';
     
     console.log('DEPURACIÓN - Estado determinado:', estado);
     console.log('DEPURACIÓN - ¿Es "Sí transmitió"?', esSiTransmitio);
     console.log('DEPURACIÓN - ¿Es "No transmitió"?', esNoTransmitio);
+    console.log('DEPURACIÓN - ¿Es "Transmitió Tarde"?', esTardio);
     
-    // ===== PASO 2: Extraer la hora del usuario (solo para "Sí transmitió") =====
+    // ===== PASO 2: Extraer la hora del usuario (solo para "Sí transmitió" y "Transmitió Tarde") =====
     let horaUsuario = null;
     
-    if (esSiTransmitio) {
+    if (esSiTransmitio || esTardio) {
       if (reporteData.hora !== undefined) {
         horaUsuario = reporteData.hora;
       } else if (reporteData.horaReal !== undefined) {
@@ -500,18 +503,33 @@ export const createReporte = async (reporteData) => {
       console.log('DEPURACIÓN - Hora final a usar:', horaUsuario);
     }
     
-    // ===== PASO 3: Extraer target/motivo (solo para "No transmitió") =====
+    // ===== PASO 3: Extraer target/motivo y convertir abreviatura a valor del backend =====
     let targetUsuario = null;
     
-    if (esNoTransmitio) {
-      // Para No transmitió, usamos el target seleccionado
+    if (esNoTransmitio || esTardio) {
+      // Para No transmitió y Tardío, usamos el target seleccionado
       if (reporteData.target !== undefined && reporteData.target !== null) {
-        targetUsuario = reporteData.target;
-        console.log('DEPURACIÓN - Target seleccionado:', targetUsuario);
+        // Convertir de abreviatura (frontend) a valor completo (backend)
+        targetUsuario = convertAbbrToBackendTarget(reporteData.target);
+        console.log('DEPURACIÓN - Target seleccionado:', reporteData.target, '→ Convertido a:', targetUsuario);
       }
     }
     
-    // ===== PASO 4: Formatear la fecha correctamente =====
+    // ===== PASO 4: Hora TT (solo para transmisión tardía) =====
+    let horaTT = null;
+    
+    if (esTardio) {
+      if (reporteData.hora_tt !== undefined) {
+        horaTT = reporteData.hora_tt;
+      } else {
+        // Si no hay hora_tt específica, usar la hora real
+        horaTT = horaUsuario;
+      }
+      
+      console.log('DEPURACIÓN - Hora TT a usar:', horaTT);
+    }
+    
+    // ===== PASO 5: Formatear la fecha correctamente =====
     let fechaFormateada;
     
     if (typeof reporteData.fecha === 'string') {
@@ -547,7 +565,7 @@ export const createReporte = async (reporteData) => {
     
     console.log('DEPURACIÓN - Fecha formateada:', fechaFormateada);
     
-    // ===== PASO 5: Crear el objeto según el estado =====
+    // ===== PASO 6: Crear el objeto según el estado =====
     let reporteObjeto;
     
     if (esSiTransmitio) {
@@ -568,7 +586,7 @@ export const createReporte = async (reporteData) => {
       reporteObjeto = {
         fecha: fechaFormateada,
         estadoTransmision: "No",
-        target: targetUsuario,  // Usa el target seleccionado
+        target: targetUsuario,  // Target ya convertido a formato backend
         motivo: null,           // Motivo null según formato del backend
         filialId: parseInt(reporteData.filialId),
         programaId: parseInt(reporteData.programaId),
@@ -576,9 +594,31 @@ export const createReporte = async (reporteData) => {
         hora_tt: null
       };
     }
+    else if (esTardio) {
+      // Objeto para "Transmitió Tarde"
+      reporteObjeto = {
+        fecha: fechaFormateada,
+        estadoTransmision: "Tarde",
+        target: targetUsuario,  // Target ya convertido a formato backend
+        motivo: reporteData.motivo || null,
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: horaUsuario,      // Hora real de transmisión
+        hora_tt: horaTT         // Hora tardía
+      };
+    }
     else {
-      // Por ahora solo implementamos "Sí transmitió" y "No transmitió"
-      throw new Error('Estado no implementado: ' + estado);
+      // Estado Pendiente u otro
+      reporteObjeto = {
+        fecha: fechaFormateada,
+        estadoTransmision: "Pendiente",
+        target: null,
+        motivo: null,
+        filialId: parseInt(reporteData.filialId),
+        programaId: parseInt(reporteData.programaId),
+        hora: null,
+        hora_tt: null
+      };
     }
     
     // ===== PASO 6: Enviar al backend como array =====
@@ -1069,6 +1109,13 @@ export const transformarReportes = (reportesBackend) => {
       horaTT = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     }
     
+    // Convertir el target del backend a la abreviatura del frontend
+    let targetTransformado = null;
+    if (reporte.target) {
+      targetTransformado = convertBackendTargetToAbbr(reporte.target);
+      console.log('DEPURACIÓN - Target convertido de backend:', reporte.target, '→', targetTransformado);
+    }
+    
     // Incluir los nuevos campos hora_tt y target
     const reporteTransformado = {
       id_reporte: reporte.id_reporte || reporte.id,
@@ -1079,7 +1126,7 @@ export const transformarReportes = (reportesBackend) => {
       motivo: reporte.motivo || '',
       horaReal: horaReal,
       hora_tt: horaTT,
-      target: reporte.target || '',
+      target: targetTransformado,
       observaciones: reporte.observaciones || '',
       estadoTransmision: reporte.estadoTransmision,
       isActivo: reporte.isActivo,
@@ -1088,25 +1135,17 @@ export const transformarReportes = (reportesBackend) => {
     };
     
     // Log para diagnóstico
-    if (process.env.NODE_ENV !== 'production' && reporte.hora_real) {
-      console.log('DIAGNÓSTICO - Transformación de reporte:', {
-        original: {
-          id: reporte.id_reporte || reporte.id,
-          estado: reporte.estadoTransmision,
-          hora_real_original: reporte.hora_real,
-          hora_real_tipo: typeof reporte.hora_real
-        },
-        transformado: {
-          estado: reporteTransformado.estado,
-          horaReal: reporteTransformado.horaReal,
-          horaReal_tipo: typeof reporteTransformado.horaReal
-        }
+    if (process.env.NODE_ENV !== 'production' && reporte.target) {
+      console.log('DIAGNÓSTICO - Target en reporte:', {
+        original: reporte.target,
+        transformado: targetTransformado
       });
     }
     
     return reporteTransformado;
   });
 };
+
 
 /**
  * Función para crear múltiples reportes

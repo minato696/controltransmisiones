@@ -1,5 +1,7 @@
 ﻿// src/components/TransmissionTracker.js (Refactorizado)
 import React from 'react';
+import { convertAbbrToBackendTarget } from '../utils/targetMapping';
+
 import { 
   Clock, CheckCircle, XCircle, AlertCircle, 
   FileText, Wifi, WifiOff
@@ -170,6 +172,12 @@ const guardarReporte = async () => {
     // Preparar datos según el estado de transmisión
     const datosReporte = { ...reporteSeleccionado };
     
+    // Convertir la abreviatura del target al valor de enum del backend
+    if (datosReporte.target) {
+      datosReporte.target = convertAbbrToBackendTarget(datosReporte.target);
+      console.log('DEPURACIÓN - Target convertido para backend:', datosReporte.target);
+    }
+    
     // Si es "Sí transmitió", asegurarnos que solo enviamos lo necesario
     if (reporteSeleccionado.estado === 'si') {
       // Verificar que la hora real esté presente
@@ -197,7 +205,7 @@ const guardarReporte = async () => {
         // Ya tiene motivo personalizado, asegurar que no sea null
         datosReporte.motivo = datosReporte.motivo || "";
       } else {
-        datosReporte.motivo = reporteSeleccionado.target || "";
+        datosReporte.motivo = datosReporte.target || "";
       }
     }
     // Si es "Transmitio Tarde", enviar todos los campos
@@ -219,7 +227,7 @@ const guardarReporte = async () => {
         // Ya tiene motivo personalizado, asegurar que no sea null
         datosReporte.motivo = datosReporte.motivo || "";
       } else {
-        datosReporte.motivo = reporteSeleccionado.target || "";
+        datosReporte.motivo = datosReporte.target || "";
       }
     }
     
