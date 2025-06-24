@@ -182,53 +182,182 @@ export const useGestorDatos = ({
     }
   };
 
-  // ==================== FUNCIONES DE REPORTES ====================
-  
-  const cargarReportesDesdeBackend = async () => {
-    try {
-      if (!programaActivo || !estadoConexion?.connected) return;
+  // Mejora para la función cargarReportesDesdeBackend en GestorDatos.js
+// Reemplaza esta función en el archivo GestorDatos.js
 
-      setCargandoReportes(true);
+const cargarReportesDesdeBackend = async () => {
+  try {
+    if (!programaActivo || !estadoConexion?.connected) {
+      console.warn('No se pueden cargar reportes: no hay programa activo o no hay conexión');
+      return;
+    }
+
+    setCargandoReportes(true);
+    
+    // Obtener fechas para consulta
+    const semanaActual = getSemanaFromDate(fechaSeleccionada);
+    const fechaInicio = formatearFechaParaBackendReporte(semanaActual.inicio);
+    const fechaFin = formatearFechaParaBackendReporte(semanaActual.fin);
+    
+    console.log(`DEPURACIÓN - Cargando reportes para semana ${fechaInicio} al ${fechaFin}`);
+    
+    // Obtener reportes del backend
+    const reportesData = await getReportesPorFechas(fechaInicio, fechaFin);
+    console.log('DEPURACIÓN - Reportes obtenidos del backend:', reportesData);
+    
+    if (!reportesData || reportesData.length === 0) {
+      console.log('No se encontraron reportes para el período seleccionado');
+      setCargandoReportes(false);
+      return;
+    }
+    
+    // Procesar reportes
+    const reportesMap = {};
+    const reportesBackendMap = {};
+    
+    // Procesar todos los reportes, no solo los del programa actual
+    // para mantener consistencia al cambiar de programa
+    reportesData.forEach(reporte => {
+      // Validar que el reporte tenga datos mínimos
+      if (!reporte.filialId || !reporte.fecha) {
+        console.warn('ADVERTENCIA: Reporte con datos incompletos:', reporte);
+        return;
+      }
       
-      const semanaActual = getSemanaFromDate(fechaSeleccionada);
-      const fechaInicio = formatearFechaParaBackendReporte(semanaActual.inicio);
-      const fechaFin = formatearFechaParaBackendReporte(semanaActual.fin);
-      
-      const reportesData = await getReportesPorFechas(fechaInicio, fechaFin);
-      
-      const reportesMap = {};
-      const reportesBackendMap = {};
-      
-      reportesData.forEach(reporte => {
-        if (reporte.programaId === programaActivo.id) {
-          const fechaObj = new Date(reporte.fecha + 'T00:00:00');
-          const clave = generarClave(reporte.filialId, reporte.programaId, fechaObj);
+      try {
+        const fechaObj = new Date(reporte.fecha + 'T00:00:00');
+        const clave = generarClave(reporte.filialId, reporte.programaId, fechaObj);
+        
+        // Verificar que la transformación del target sea correcta
+        if (reporte.estado === 'no' && !reporte.target && reporte.target !== '') {
+          console.warn('ADVERTENCIA: Reporte "no transmitió" sin target:', reporte);
           
-          reportesMap[clave] = {
-            estado: reporte.estado,
-            motivo: reporte.motivo,
-            horaReal: reporte.horaReal,
-            observaciones: reporte.observaciones
-          };
-          
+          // Si es "no transmitió" y no tiene target, asignar uno por defecto
+          if (!reporte.target) {
+            reporte.target = 'Fta'; // Abreviatura para "Falta"
+            console.log('DEPURACIÓN - Asignando target por defecto:', reporte.target);
+          }
+        }
+        
+        // Guardar reporte en el mapa
+        reportesMap[clave] = {
+          estado: reporte.estado || 'pendiente',
+          motivo: reporte.motivo || '',
+          horaReal: reporte.horaReal || '',
+          hora_tt: reporte.hora_tt || '',
+          target: reporte.target || '',
+          observaciones: reporte.observaciones || ''
+        };
+        
+        // Guardar ID del reporte para referencia
+        if (reporte.id_reporte) {
           reportesBackendMap[clave] = reporte.id_reporte;
         }
-      });
-      
-      setReportes(prevReportes => ({ ...prevReportes, ...reportesMap }));
-      setReportesBackend(prevBackend => ({ ...prevBackend, ...reportesBackendMap }));
-      
-    } catch (error) {
-      // Silencioso
-    } finally {
-      setCargandoReportes(false);
-    }
-  };
+        
+        console.log(`DEPURACIÓN - Reporte procesado para clave ${clave}:`, reportesMap[clave]);
+      } catch (error) {
+        console.error('Error al procesar reporte:', error, reporte);
+      }
+    });
+    
+    // Actualizar estados
+    setReportes(prevReportes => ({ ...prevReportes, ...reportesMap }));
+    setReportesBackend(prevBackend => ({ ...prevBackend, ...reportesBackendMap }));
+    
+    console.log(`DEPURACIÓN - Carga completada: ${Object.keys(reportesMap).length} reportes procesados`);
+    
+  } catch (error) {
+    console.error('Error al cargar reportes desde backend:', error);
+  } finally {
+    setCargandoReportes(false);
+  }
+};
 
-  const obtenerEstadoReporte = (filialId, programaId, fecha) => {
-    const clave = generarClave(filialId, programaId, fecha);
-    return reportes[clave] || { estado: 'pendiente', motivo: '', horaReal: '' };
+
+
+// Función mejorada para obtenerEstadoReporte
+// Reemplaza esta función en el archivo GestorDatos.js
+
+const obtenerEstadoReporte = (filialId, programaId, fecha) => {
+  // Verificar parámetros
+  if (!filialId || !programaId || !fecha) {
+    console.warn('ADVERTENCIA: Parámetros incompletos en obtenerEstadoReporte', {
+      filialId, programaId, fecha
+    });
+    return { estado: 'pendiente', motivo: '', horaReal: '' };
+  }
+
+  // Generar clave para buscar en el objeto de reportes
+  const clave = generarClave(filialId, programaId, fecha);
+  
+  // Buscar el reporte en la estructura local
+  const reporteLocal = reportes[clave];
+  
+  // Buscar el ID del reporte en el backend (si existe)
+  const reporteBackendId = reportesBackend[clave];
+  
+  // Debug para verificar qué reportes tenemos
+  console.log(`DEPURACIÓN - obtenerEstadoReporte para clave: ${clave}`);
+  console.log('- Reporte local:', reporteLocal);
+  console.log('- ID Reporte backend:', reporteBackendId);
+  
+  // Si encontramos un reporte local, lo devolvemos
+  if (reporteLocal) {
+    // Asegurarse que todas las propiedades existan
+    const reporteCompleto = {
+      estado: reporteLocal.estado || 'pendiente',
+      motivo: reporteLocal.motivo || '',
+      horaReal: reporteLocal.horaReal || '',
+      hora_tt: reporteLocal.hora_tt || '',
+      target: reporteLocal.target || '', // Asegurar que target siempre exista
+      observaciones: reporteLocal.observaciones || '',
+      id_reporte: reporteBackendId
+    };
+    
+    // Si el target no está definido pero tenemos un motivo, intentar inferir el target
+    if (!reporteCompleto.target && reporteCompleto.motivo) {
+      try {
+        // Intentar encontrar un target basado en el motivo
+        for (const [abbr, label] of Object.entries(getTargetLabelMap())) {
+          if (reporteCompleto.motivo.includes(label) || 
+              reporteCompleto.motivo.includes(abbr)) {
+            reporteCompleto.target = abbr;
+            console.log(`DEPURACIÓN - Target inferido del motivo: ${abbr}`);
+            break;
+          }
+        }
+      } catch (e) {
+        console.error('Error al inferir target del motivo:', e);
+      }
+    }
+    
+    console.log('DEPURACIÓN - Devolviendo reporte completo:', reporteCompleto);
+    return reporteCompleto;
+  }
+  
+  // Si no hay reporte local, crear uno predeterminado
+  return { 
+    estado: 'pendiente', 
+    motivo: '', 
+    horaReal: '',
+    hora_tt: '',
+    target: '',
+    observaciones: '',
+    id_reporte: reporteBackendId
   };
+};
+
+// Función auxiliar para mapeo de targets a etiquetas
+function getTargetLabelMap() {
+  return {
+    "Enf": "Enfermedad",
+    "P. Tec": "Problema técnico",
+    "F. Serv": "Falla de servicios",
+    "Tde": "Tarde",
+    "Fta": "Falta",
+    "Otros": "Otros"
+  };
+}
 
 const actualizarReporte = async (filialId, programaId, fecha, nuevoEstado) => {
   const clave = generarClave(filialId, programaId, fecha);

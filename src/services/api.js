@@ -1041,15 +1041,21 @@ export const getReportes = async () => {
   }
 };
 
-/**
- /**
- * Transformar reportes del backend
- */
-/**
- * Transformar reportes del backend
- */
+// Mejora para la función transformarReportes en api.js
+// Reemplaza esta función en el archivo api.js
+
 export const transformarReportes = (reportesBackend) => {
+  console.log('DEPURACIÓN - Iniciando transformación de reportes del backend', 
+              {cantidad: reportesBackend?.length || 0});
+  
+  if (!reportesBackend || !Array.isArray(reportesBackend)) {
+    console.warn('ADVERTENCIA: No hay reportes para transformar o formato inválido', reportesBackend);
+    return [];
+  }
+  
   return reportesBackend.map(reporte => {
+    console.log('DEPURACIÓN - Transformando reporte individual:', reporte);
+    
     // Priorizar campos directos filialId y programaId
     let filialId = reporte.filialId || reporte.filial_id || reporte.filial?.id;
     let programaId = reporte.programaId || reporte.programa_id || reporte.programa?.id;
@@ -1064,6 +1070,7 @@ export const transformarReportes = (reportesBackend) => {
           fechaTransformada = reporte.fecha;
         }
       } catch (error) {
+        console.error('Error al transformar fecha:', error);
         fechaTransformada = reporte.fecha;
       }
     }
@@ -1114,6 +1121,33 @@ export const transformarReportes = (reportesBackend) => {
     if (reporte.target) {
       targetTransformado = convertBackendTargetToAbbr(reporte.target);
       console.log('DEPURACIÓN - Target convertido de backend:', reporte.target, '→', targetTransformado);
+    } 
+    // Si no hay target pero hay motivo, intenta derivar el target del motivo
+    else if (reporte.motivo) {
+      // Intentar inferir target del motivo
+      const motivo = reporte.motivo.toLowerCase();
+      if (motivo.includes('enfermedad') || motivo.includes('enf')) {
+        targetTransformado = 'Enf';
+      } else if (motivo.includes('problema') || motivo.includes('tecnico') || motivo.includes('tec')) {
+        targetTransformado = 'P. Tec';
+      } else if (motivo.includes('falla') || motivo.includes('servicio')) {
+        targetTransformado = 'F. Serv';
+      } else if (motivo.includes('tarde') || motivo.includes('tde')) {
+        targetTransformado = 'Tde';
+      } else if (motivo.includes('falta') || motivo.includes('fta')) {
+        targetTransformado = 'Fta';
+      } else {
+        targetTransformado = 'Otros';
+      }
+      console.log('DEPURACIÓN - Target inferido del motivo:', motivo, '→', targetTransformado);
+    }
+    // En caso de no transmitir, asignar un target por defecto según el estado
+    else if (estadoTransformado === 'no') {
+      targetTransformado = 'Fta'; // Valor por defecto para "No transmitió"
+      console.log('DEPURACIÓN - Asignando target por defecto para No transmitió:', targetTransformado);
+    } else if (estadoTransformado === 'tarde') {
+      targetTransformado = 'Tde'; // Valor por defecto para "Transmitió Tarde"
+      console.log('DEPURACIÓN - Asignando target por defecto para Transmitió Tarde:', targetTransformado);
     }
     
     // Incluir los nuevos campos hora_tt y target
@@ -1142,6 +1176,7 @@ export const transformarReportes = (reportesBackend) => {
       });
     }
     
+    console.log('DEPURACIÓN - Reporte transformado final:', reporteTransformado);
     return reporteTransformado;
   });
 };

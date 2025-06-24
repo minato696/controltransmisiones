@@ -429,7 +429,9 @@ export const TooltipReporte = ({ tooltip }) => {
   );
 };
 
-// src/components/InterfazUsuario.js - Componente ModalReporte Actualizado
+// src/components/InterfazUsuario.js - SECCIÓN MODAL REPORTE MEJORADA
+// Reemplaza la función existente ModalReporte con esta versión mejorada
+
 export const ModalReporte = ({ 
   mostrarModal, 
   setMostrarModal, 
@@ -467,16 +469,21 @@ export const ModalReporte = ({
     console.log('================================');
   };
 
-  // useEffect para procesar el target cuando se abre el modal
-  useEffect(() => {
-    if (mostrarModal && reporteSeleccionado) {
-      console.log('DEPURACIÓN - Modal abierto con reporte:', reporteSeleccionado);
-      
-      // Verificar el target original
+// Versión mejorada para el useEffect del ModalReporte en InterfazUsuario.js
+// Añade o reemplaza este useEffect en el componente ModalReporte
+
+// useEffect para procesar el target cuando se abre el modal
+useEffect(() => {
+  if (mostrarModal && reporteSeleccionado) {
+    console.log('DEPURACIÓN - Modal abierto con reporte completo:', reporteSeleccionado);
+    
+    // Si hay datos del backend, vamos a procesarlos
+    try {
+      // Procesar target si existe
       if (reporteSeleccionado.target) {
         debugTarget(reporteSeleccionado.target);
         
-        // Verificamos si el target NO es una abreviatura (si no es alguno de los valores en targetOptions)
+        // Verificamos si el target NO es una abreviatura
         const esAbreviatura = targetOptions.some(opt => opt.value === reporteSeleccionado.target);
         
         if (!esAbreviatura) {
@@ -489,10 +496,111 @@ export const ModalReporte = ({
             ...prev,
             target: targetAbreviado
           }));
+        } else {
+          console.log('DEPURACIÓN - Target ya es una abreviatura:', reporteSeleccionado.target);
         }
       }
+      // Si no hay target pero el estado es 'no' o 'tarde', debemos asignar uno por defecto
+      else if (reporteSeleccionado.estado === 'no' || reporteSeleccionado.estado === 'tarde') {
+        console.log('DEPURACIÓN - Falta target pero el estado es:', reporteSeleccionado.estado);
+        
+        // Asignar target por defecto según el estado
+        let targetPredeterminado = '';
+        if (reporteSeleccionado.estado === 'no') {
+          targetPredeterminado = 'Fta'; // Abreviatura para "Falta"
+        } else if (reporteSeleccionado.estado === 'tarde') {
+          targetPredeterminado = 'Tde'; // Abreviatura para "Tarde"
+        }
+        
+        console.log('DEPURACIÓN - Asignando target predeterminado:', targetPredeterminado);
+        
+        // Actualizar el reporte con el target predeterminado
+        setReporteSeleccionado(prev => ({
+          ...prev,
+          target: targetPredeterminado
+        }));
+      }
+    } catch (error) {
+      console.error('Error al procesar target en modal:', error);
     }
-  }, [mostrarModal, reporteSeleccionado, setReporteSeleccionado]);
+  }
+}, [mostrarModal, reporteSeleccionado]);
+
+// Segundo useEffect para establecer valores predeterminados después del procesamiento del target
+useEffect(() => {
+  if (reporteSeleccionado) {
+    console.log('DEPURACIÓN - Verificando valores predeterminados:', reporteSeleccionado);
+    
+    let actualizacionNecesaria = false;
+    let reporteActualizado = { ...reporteSeleccionado };
+    
+    // Si el reporteSeleccionado existe, asegurarnos que horaReal tenga un valor
+    // cuando el estado es 'si' (Sí transmitió)
+    if (reporteSeleccionado.estado === 'si' && !reporteSeleccionado.horaReal) {
+      // Buscar el programa actual para obtener la hora predeterminada
+      const programaActual = programas.find(p => p.id === reporteSeleccionado?.programaId);
+      const horaPredeterminada = programaActual?.horario || "05:00";
+      
+      console.log('DEPURACIÓN - Estableciendo hora predeterminada en modal:', horaPredeterminada);
+      reporteActualizado.horaReal = horaPredeterminada;
+      actualizacionNecesaria = true;
+    }
+    
+    // Para estado 'no', asegurar que tiene un target
+    if (reporteSeleccionado.estado === 'no' && !reporteSeleccionado.target) {
+      reporteActualizado.target = 'Fta'; // Abreviatura para "Falta"
+      console.log('DEPURACIÓN - Estableciendo target predeterminado para No transmitió:', 'Fta');
+      actualizacionNecesaria = true;
+    }
+    
+    // Para estado 'tarde', asegurar que tiene target y horas
+    if (reporteSeleccionado.estado === 'tarde') {
+      if (!reporteSeleccionado.target) {
+        reporteActualizado.target = 'Tde'; // Abreviatura para "Tarde"
+        console.log('DEPURACIÓN - Estableciendo target predeterminado para Tarde:', 'Tde');
+        actualizacionNecesaria = true;
+      }
+      
+      if (!reporteSeleccionado.horaReal) {
+        const programaActual = programas.find(p => p.id === reporteSeleccionado?.programaId);
+        const horaPredeterminada = programaActual?.horario || "05:00";
+        reporteActualizado.horaReal = horaPredeterminada;
+        console.log('DEPURACIÓN - Estableciendo hora real predeterminada para Tarde:', horaPredeterminada);
+        actualizacionNecesaria = true;
+      }
+      
+      if (!reporteSeleccionado.hora_tt) {
+        // Para hora tardía, usar una hora posterior a la real
+        const horaBase = reporteActualizado.horaReal || "05:00";
+        const [horas, minutos] = horaBase.split(':').map(Number);
+        let horasRetrasadas = horas;
+        let minutosRetrasados = minutos + 30; // Añadir 30 minutos por defecto
+        
+        if (minutosRetrasados >= 60) {
+          horasRetrasadas += 1;
+          minutosRetrasados -= 60;
+        }
+        
+        if (horasRetrasadas >= 24) {
+          horasRetrasadas -= 24;
+        }
+        
+        const horaTardiaDefault = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
+        reporteActualizado.hora_tt = horaTardiaDefault;
+        console.log('DEPURACIÓN - Estableciendo hora tardía predeterminada:', horaTardiaDefault);
+        actualizacionNecesaria = true;
+      }
+    }
+    
+    // Actualizar el estado solo si es necesario
+    if (actualizacionNecesaria) {
+      console.log('DEPURACIÓN - Actualizando reporte con valores predeterminados:', reporteActualizado);
+      setReporteSeleccionado(reporteActualizado);
+    }
+  }
+}, [reporteSeleccionado, programas, setReporteSeleccionado]);
+
+
 
   // useEffect para establecer valor predeterminado de horaReal
   useEffect(() => {
@@ -801,7 +909,7 @@ export const ModalReporte = ({
                 (reporteSeleccionado.estado === 'si' && !reporteSeleccionado.horaReal) ||
                 (reporteSeleccionado.estado === 'tarde' && !reporteSeleccionado.hora_tt) ||
                 ((reporteSeleccionado.estado === 'tarde' || reporteSeleccionado.estado === 'no') && 
-                  reporteSeleccionado.target === 'Otros' && !reporteSeleccionado.motivo)}
+                 !reporteSeleccionado.target)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
             >
               {guardandoReporte && (
@@ -815,7 +923,10 @@ export const ModalReporte = ({
       </div>
     </div>
   );
-};
+}
+
+
+
 
 // ==================== COMPONENTE MODAL DE NOTAS ====================
 
