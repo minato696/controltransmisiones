@@ -230,84 +230,99 @@ export const useGestorDatos = ({
     return reportes[clave] || { estado: 'pendiente', motivo: '', horaReal: '' };
   };
 
-  const actualizarReporte = async (filialId, programaId, fecha, nuevoEstado) => {
-    const clave = generarClave(filialId, programaId, fecha);
-    
-    try {
-      // Actualizar estado local inmediatamente
-      setReportes(prev => ({
-        ...prev,
-        [clave]: nuevoEstado
-      }));
+const actualizarReporte = async (filialId, programaId, fecha, nuevoEstado) => {
+  const clave = generarClave(filialId, programaId, fecha);
+  
+  try {
+    // Actualizar estado local inmediatamente
+    setReportes(prev => ({
+      ...prev,
+      [clave]: nuevoEstado
+    }));
 
-      // Si hay conexión, guardar en el backend
-      if (estadoConexion?.connected) {
-        setGuardandoReporte(true);
-        
-        const fechaFormateada = formatearFechaParaBackendReporte(fecha);
-        
-        const datosReporte = {
-          ...nuevoEstado,
-          id_reporte: reportesBackend[clave] || null,
-          horaReal: nuevoEstado.horaReal || nuevoEstado.hora_real || 
-                   (programaActivo?.horario) || "05:00"
-        };
-        
-        const resultado = await guardarOActualizarReporte(
-          filialId, 
-          programaId, 
-          fechaFormateada, 
-          datosReporte
-        );
-        
-        // Actualizar el ID del reporte en el backend map
-        if (resultado.id || resultado.id_reporte) {
-          const reporteId = resultado.id || resultado.id_reporte;
-          setReportesBackend(prev => ({
-            ...prev,
-            [clave]: reporteId
-          }));
-        }
-        
-        // Recargar reportes desde el backend para sincronizar
-        await cargarReportesDesdeBackend();
+    // Si hay conexión, guardar en el backend
+    if (estadoConexion?.connected) {
+      setGuardandoReporte(true);
+      
+      const fechaFormateada = formatearFechaParaBackendReporte(fecha);
+      
+      // Preparar los datos del reporte incluyendo los nuevos campos
+      const datosReporte = {
+        ...nuevoEstado,
+        id_reporte: reportesBackend[clave] || null,
+        horaReal: nuevoEstado.horaReal || nuevoEstado.hora_real || 
+                 (programaActivo?.horario) || "05:00",
+        // Incluir los nuevos campos
+        hora_tt: nuevoEstado.hora_tt || null,
+        target: nuevoEstado.target || null
+      };
+      
+      // Si el estado es 'tarde' y no hay motivo específico, usar target como motivo
+      if (nuevoEstado.estado === 'tarde' && !nuevoEstado.motivo && nuevoEstado.target && nuevoEstado.target !== 'Otros') {
+        datosReporte.motivo = nuevoEstado.target;
       }
       
-    } catch (error) {
-      console.error('Error al actualizar reporte:', error.message);
-      
-      // Revertir cambio en caso de error
-      setReportes(prev => {
-        const newReportes = { ...prev };
-        delete newReportes[clave];
-        return newReportes;
-      });
-      
-      // Mostrar error detallado al usuario
-      let mensajeError = 'Error al guardar el reporte.';
-      
-      if (error.response?.data?.message) {
-        mensajeError += `\n\nDetalle: ${error.response.data.message}`;
-        
-        if (error.response.data.message.includes('hora_real')) {
-          mensajeError += '\n\n💡 Sugerencia: Asegúrate de que el reporte tenga una hora válida.';
-        }
-      } else if (error.response?.data?.trace) {
-        if (error.response.data.trace.includes('ArrayList<com.kalek.incidencia.dto.ReporteDTO>')) {
-          mensajeError += '\n\nError de formato: El backend esperaba un array de reportes.';
-        } else {
-          mensajeError += `\n\nError técnico: ${error.response.data.error}`;
-        }
+      // Si el estado es 'no' y no hay motivo específico, usar target como motivo
+      if (nuevoEstado.estado === 'no' && !nuevoEstado.motivo && nuevoEstado.target && nuevoEstado.target !== 'Otros') {
+        datosReporte.motivo = nuevoEstado.target;
       }
       
-      mensajeError += '\n\nPor favor, verifica la conexión e inténtalo de nuevo.';
+      const resultado = await guardarOActualizarReporte(
+        filialId, 
+        programaId, 
+        fechaFormateada, 
+        datosReporte
+      );
       
-      throw new Error(mensajeError);
+      // Actualizar el ID del reporte en el backend map
+      if (resultado.id || resultado.id_reporte) {
+        const reporteId = resultado.id || resultado.id_reporte;
+        setReportesBackend(prev => ({
+          ...prev,
+          [clave]: reporteId
+        }));
+      }
       
-    } finally {
-      setGuardandoReporte(false);
+      // Recargar reportes desde el backend para sincronizar
+      await cargarReportesDesdeBackend();
     }
-  };
+    
+  } catch (error) {
+    console.error('Error al actualizar reporte:', error.message);
+    
+    // Revertir cambio en caso de error
+    setReportes(prev => {
+      const newReportes = { ...prev };
+      delete newReportes[clave];
+      return newReportes;
+    });
+    
+    // Mostrar error detallado al usuario
+    let mensajeError = 'Error al guardar el reporte.';
+    
+    if (error.response?.data?.message) {
+      mensajeError += `\n\nDetalle: ${error.response.data.message}`;
+      
+      if (error.response.data.message.includes('hora_real') || 
+          error.response.data.message.includes('hora_tt')) {
+        mensajeError += '\n\n💡 Sugerencia: Asegúrate de que el reporte tenga una hora válida.';
+      }
+    } else if (error.response?.data?.trace) {
+      if (error.response.data.trace.includes('ArrayList<com.kalek.incidencia.dto.ReporteDTO>')) {
+        mensajeError += '\n\nError de formato: El backend esperaba un array de reportes.';
+      } else {
+        mensajeError += `\n\nError técnico: ${error.response.data.error}`;
+      }
+    }
+    
+    mensajeError += '\n\nPor favor, verifica la conexión e inténtalo de nuevo.';
+    
+    throw new Error(mensajeError);
+    
+  } finally {
+    setGuardandoReporte(false);
+  }
+};
 
   // ==================== FUNCIONES DE NOTAS ====================
   

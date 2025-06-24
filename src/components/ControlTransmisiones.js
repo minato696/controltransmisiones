@@ -155,25 +155,72 @@ const TransmissionTracker = ({
   };
 
   const guardarReporte = async () => {
-    if (!reporteSeleccionado) return;
+  if (!reporteSeleccionado) return;
+  
+  try {
+    // Log detallado antes de enviar al backend
+    console.log('DEPURACIÓN - FRONTEND - Datos antes de enviar al backend:');
+    console.log('Estado:', reporteSeleccionado.estado);
+    console.log('Hora Real:', reporteSeleccionado.horaReal);
+    console.log('Hora TT:', reporteSeleccionado.hora_tt);
+    console.log('Target:', reporteSeleccionado.target);
+    console.log('Motivo:', reporteSeleccionado.motivo);
+    console.log('Objeto completo:', reporteSeleccionado);
     
-    try {
-      await actualizarReporte(
-        reporteSeleccionado.filialId, 
-        reporteSeleccionado.programaId,
-        reporteSeleccionado.fecha, 
-        {
-          estado: reporteSeleccionado.estado,
-          motivo: reporteSeleccionado.motivo,
-          horaReal: reporteSeleccionado.horaReal
-        }
-      );
-      setMostrarModal(false);
-      setReporteSeleccionado(null);
-    } catch (error) {
-      alert(error.message);
+    // Preparar datos según el estado de transmisión
+    const datosReporte = { ...reporteSeleccionado };
+    
+    // Si es "Sí transmitió", asegurarnos que solo enviamos lo necesario
+    if (reporteSeleccionado.estado === 'si') {
+      // Verificar que la hora real esté presente
+      if (!datosReporte.horaReal) {
+        // Si no hay hora real, usar la hora del programa
+        const programaActual = programas.find(p => p.id === reporteSeleccionado.programaId);
+        datosReporte.horaReal = programaActual?.horario || "05:00";
+        console.log('DEPURACIÓN - Se asignó hora predeterminada:', datosReporte.horaReal);
+      }
+      
+      // Para "Sí transmitió" solo enviamos estado y hora real
+      datosReporte.hora_tt = null;
+      datosReporte.target = null;
+      datosReporte.motivo = null;
+    } 
+    // Si es "No transmitió", enviar estado y target como motivo
+    else if (reporteSeleccionado.estado === 'no') {
+      datosReporte.horaReal = null;
+      datosReporte.hora_tt = null;
+      // Si el target es "Otros", usar el motivo, sino usar el target como motivo
+      if (reporteSeleccionado.target === 'Otros') {
+        // Mantener el motivo personalizado
+      } else {
+        datosReporte.motivo = reporteSeleccionado.target;
+      }
     }
-  };
+    // Si es "Transmitio Tarde", enviar todos los campos
+    
+    // Log de lo que vamos a enviar después de los ajustes
+    console.log('DEPURACIÓN - FRONTEND - Datos ajustados para enviar:');
+    console.log('Estado:', datosReporte.estado);
+    console.log('Hora Real:', datosReporte.horaReal);
+    console.log('Hora TT:', datosReporte.hora_tt);
+    console.log('Target:', datosReporte.target);
+    console.log('Motivo:', datosReporte.motivo);
+    
+    // Enviar al backend
+    await actualizarReporte(
+      datosReporte.filialId, 
+      datosReporte.programaId,
+      datosReporte.fecha, 
+      datosReporte
+    );
+    
+    setMostrarModal(false);
+    setReporteSeleccionado(null);
+  } catch (error) {
+    console.error('DEPURACIÓN - Error al guardar reporte:', error);
+    alert(error.message);
+  }
+};
 
   const guardarNotaGeneral = async () => {
     if (!notaSeleccionada) return;

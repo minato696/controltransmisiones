@@ -401,27 +401,48 @@ export const getReportePorId = async (id) => {
  */
 export const createReporte = async (reporteData) => {
   try {
+    console.log('DEPURACIÓN - API - Datos recibidos en createReporte:', reporteData);
+    
+    // Asegurarse de que hora_real esté presente y sea un string válido
+    const horaReal = reporteData.hora_real || reporteData.horaReal || "05:00";
+    console.log('DEPURACIÓN - API - Hora real utilizada:', horaReal);
+    
     const reporte = {
       fecha: convertirFechaASwagger(reporteData.fecha),
-      hora_real: reporteData.hora_real || reporteData.horaReal || "05:00", 
-      motivo: reporteData.motivo || "OK",               
+      hora_real: horaReal, 
+      motivo: reporteData.motivo || null,               
       estadoTransmision: convertirEstadoAEnum(reporteData.estadoTransmision),
       filialId: reporteData.filialId,                   
-      programaId: reporteData.programaId                
+      programaId: reporteData.programaId,
+      // Nuevos campos
+      hora_tt: reporteData.hora_tt || null,
+      target: reporteData.target || null
     };
 
+    // Log para debugging - Este es el objeto que se enviará al backend
+    console.log('DEPURACIÓN - API - Objeto final enviado al backend:', reporte);
+
     // Validación extra
-    if (!reporte.fecha || !reporte.hora_real || !reporte.motivo) {
-      throw new Error('Campos obligatorios faltantes: fecha, hora_real, motivo');
+    if (!reporte.fecha) {
+      throw new Error('Campo obligatorio faltante: fecha');
     }
 
     if (typeof reporte.filialId !== 'number' || typeof reporte.programaId !== 'number') {
       throw new Error('filialId y programaId deben ser números');
     }
     
+    // Antes de enviar al backend, comprobamos que hora_real sea un string
+    if (reporte.hora_real && typeof reporte.hora_real !== 'string') {
+      console.warn('DEPURACIÓN - API - hora_real no es string, convirtiendo:', reporte.hora_real);
+      reporte.hora_real = String(reporte.hora_real);
+    }
+    
     const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporte]);
+    console.log('DEPURACIÓN - API - Respuesta del backend:', response.data);
+    
     return Array.isArray(response.data) ? response.data[0] : response.data;
   } catch (error) {
+    console.error('DEPURACIÓN - API - Error en createReporte:', error);
     throw error;
   }
 };
@@ -438,7 +459,10 @@ export const updateReporte = async (id, reporteData) => {
       motivo: reporteData.motivo || "OK",
       estadoTransmision: convertirEstadoAEnum(reporteData.estadoTransmision),
       filialId: reporteData.filialId,
-      programaId: reporteData.programaId
+      programaId: reporteData.programaId,
+      // Nuevos campos
+      hora_tt: reporteData.hora_tt || null,
+      target: reporteData.target || null
     };
     
     const response = await api.put(`${REPORTE_ENDPOINTS.UPDATE}/${id}`, reporte);
@@ -465,31 +489,149 @@ export const deleteReporte = async (id) => {
  */
 export const guardarOActualizarReporte = async (filialId, programaId, fecha, datosReporte) => {
   try {
+    console.log('DEPURACIÓN - API - Datos recibidos en guardarOActualizarReporte:', {
+      filialId, programaId, fecha, datosReporte
+    });
+    
+    // Extraer la hora real de todas las posibles fuentes
+    const horaReal = datosReporte.horaReal || datosReporte.hora_real || "05:00";
+    console.log('DEPURACIÓN - API - Hora real extraída:', horaReal);
+    
     const reporteData = {
       filialId: filialId,
       programaId: programaId,
       fecha: fecha,
       estadoTransmision: datosReporte.estado || 'pendiente',
       motivo: datosReporte.motivo || null,
-      hora_real: datosReporte.horaReal || datosReporte.hora_real || "05:00",
-      observaciones: datosReporte.observaciones || null
+      hora_real: horaReal,
+      observaciones: datosReporte.observaciones || null,
+      // Nuevos campos
+      hora_tt: datosReporte.hora_tt || null,
+      target: datosReporte.target || null
     };
     
-    // Validación extra
-    if (!reporteData.hora_real) {
-      reporteData.hora_real = "05:00";
-    }
+    console.log('DEPURACIÓN - API - Objeto preparado para enviar:', reporteData);
     
     // Si tenemos un ID, actualizar; si no, crear nuevo
     if (datosReporte.id_reporte) {
+      console.log('DEPURACIÓN - API - Actualizando reporte existente:', datosReporte.id_reporte);
       return await updateReporte(datosReporte.id_reporte, reporteData);
     } else {
+      console.log('DEPURACIÓN - API - Creando nuevo reporte');
       return await createReporte(reporteData);
     }
     
   } catch (error) {
+    console.error('DEPURACIÓN - API - Error en guardarOActualizarReporte:', error);
     throw error;
   }
+};
+
+export const inspeccionarReporteBackend = async (reporteId) => {
+  try {
+    console.log('INSPECCIÓN - Obteniendo reporte con ID:', reporteId);
+    const response = await api.get(`${REPORTE_ENDPOINTS.GET_BY_ID}/${reporteId}`);
+    
+    console.log('INSPECCIÓN - Respuesta del backend:');
+    console.log(JSON.stringify(response.data, null, 2));
+    
+    // Inspeccionar específicamente la estructura de hora_real
+    const horaReal = response.data.hora_real;
+    console.log('INSPECCIÓN - Tipo de hora_real:', typeof horaReal);
+    console.log('INSPECCIÓN - Valor de hora_real:', horaReal);
+    
+    if (typeof horaReal === 'object') {
+      console.log('INSPECCIÓN - hora_real es un objeto. Propiedades:');
+      for (const prop in horaReal) {
+        console.log(`  ${prop}: ${horaReal[prop]} (${typeof horaReal[prop]})`);
+      }
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('INSPECCIÓN - Error al obtener reporte:', error);
+    throw error;
+  }
+};
+
+// Función para probar la creación de un reporte simple para depuración
+export const crearReporteTest = async () => {
+  try {
+    const reporteSimple = {
+      fecha: formatearFechaParaBackend(), // fecha actual
+      hora_real: "05:00",
+      motivo: "Test desde frontend",
+      estadoTransmision: "Si",
+      filialId: 1, // Usar un ID válido
+      programaId: 1 // Usar un ID válido
+    };
+    
+    console.log('TEST - Enviando reporte simple al backend:', reporteSimple);
+    
+    const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporteSimple]);
+    console.log('TEST - Respuesta del backend:', response.data);
+    
+    // Si se creó correctamente, intentamos obtenerlo para ver su estructura
+    if (Array.isArray(response.data) && response.data.length > 0) {
+      const reporteId = response.data[0].id || response.data[0].id_reporte;
+      await inspeccionarReporteBackend(reporteId);
+    }
+    
+    return Array.isArray(response.data) ? response.data[0] : response.data;
+  } catch (error) {
+    console.error('TEST - Error al crear reporte de prueba:', error);
+    throw error;
+  }
+};
+
+// Función para inspeccionar cómo maneja el backend el formato de hora
+export const probarFormatosHora = async () => {
+  const formatos = [
+    { formato: "05:00", descripcion: "String simple HH:MM" },
+    { formato: { hour: 5, minute: 0 }, descripcion: "Objeto con hour y minute" },
+    { formato: "05:00:00", descripcion: "String con segundos HH:MM:SS" },
+    { formato: 5, descripcion: "Número (solo hora)" }
+  ];
+  
+  const resultados = [];
+  
+  for (const test of formatos) {
+    try {
+      const reporteTest = {
+        fecha: formatearFechaParaBackend(),
+        hora_real: test.formato,
+        motivo: `Test formato: ${test.descripcion}`,
+        estadoTransmision: "Si",
+        filialId: 1,
+        programaId: 1
+      };
+      
+      console.log(`TEST FORMATO - Probando: ${test.descripcion}`, reporteTest);
+      
+      const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporteTest]);
+      const resultado = Array.isArray(response.data) ? response.data[0] : response.data;
+      
+      resultados.push({
+        formato: test.formato,
+        descripcion: test.descripcion,
+        exito: true,
+        respuesta: resultado
+      });
+      
+    } catch (error) {
+      resultados.push({
+        formato: test.formato,
+        descripcion: test.descripcion,
+        exito: false,
+        error: error.message
+      });
+    }
+  }
+  
+  console.log('RESULTADOS DE PRUEBAS DE FORMATO:');
+  console.table(resultados);
+  
+  return resultados;
 };
 
 /**
@@ -533,6 +675,7 @@ export const getReportes = async () => {
 };
 
 /**
+ /**
  * Transformar reportes del backend
  */
 export const transformarReportes = (reportesBackend) => {
@@ -581,6 +724,7 @@ export const transformarReportes = (reportesBackend) => {
     // Buscar hora con diferentes nombres
     const horaReal = reporte.hora_real || reporte.hora || reporte.horaReal || '';
     
+    // Incluir los nuevos campos hora_tt y target
     const reporteTransformado = {
       id_reporte: reporte.id_reporte || reporte.id,
       filialId: filialId,
@@ -589,6 +733,8 @@ export const transformarReportes = (reportesBackend) => {
       estado: estadoTransformado,
       motivo: reporte.motivo || '',
       horaReal: horaReal,
+      hora_tt: reporte.hora_tt || '', // Nuevo campo
+      target: reporte.target || '',   // Nuevo campo
       observaciones: reporte.observaciones || '',
       estadoTransmision: reporte.estadoTransmision,
       isActivo: reporte.isActivo,
