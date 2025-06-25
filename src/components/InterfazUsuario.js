@@ -1,4 +1,4 @@
-// src/components/InterfazUsuario.js
+// src/components/InterfazUsuario.js - VERSIÓN LIMPIA
 import { targetOptions, convertBackendTargetToAbbr, convertAbbrToBackendTarget } from '../utils/targetMapping';
 import React, { useState, useEffect } from 'react';
 import { 
@@ -359,7 +359,7 @@ export const PestanasProgramas = ({ programas, programaActivo, setProgramaActivo
   </div>
 );
 
-// ==================== COMPONENTE TOOLTIP - ACTUALIZADO ====================
+// ==================== COMPONENTE TOOLTIP ====================
 
 export const TooltipReporte = ({ tooltip }) => {
   if (!tooltip.visible) return null;
@@ -429,7 +429,7 @@ export const TooltipReporte = ({ tooltip }) => {
   );
 };
 
-// src/components/InterfazUsuario.js - SECCIÓN MODAL REPORTE CORREGIDA
+// ==================== MODAL REPORTE ====================
 
 export const ModalReporte = ({ 
   mostrarModal, 
@@ -950,7 +950,7 @@ export const PanelInformacion = ({
   </div>
 );
 
-// ==================== HOOK PARA MANEJO DE MODALES - ACTUALIZADO ====================
+// ==================== HOOK PARA MANEJO DE MODALES ====================
 
 export const useModalManager = () => {
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -961,7 +961,7 @@ export const useModalManager = () => {
   const [modoVista, setModoVista] = useState('semana');
   const [filtroFilial, setFiltroFilial] = useState('');
 
-  // Estados para tooltip - ACTUALIZADO
+  // Estados para tooltip
   const [tooltip, setTooltip] = useState({
     visible: false,
     reporte: null,
@@ -970,20 +970,11 @@ export const useModalManager = () => {
     y: 0
   });
 
-  // ACTUALIZADO: mostrarTooltip con depuración
   const mostrarTooltip = (event, reporte) => {
     // Asegurarse que tenemos el reporte completo
     if (!reporte) return;
     
     const rect = event.currentTarget.getBoundingClientRect();
-    
-    // Debugging - Mostrar información completa del reporte en la consola
-    console.log('DEPURACIÓN - TOOLTIP - Reporte recibido:', reporte);
-    console.log('DEPURACIÓN - TOOLTIP - Estado:', reporte.estado);
-    console.log('DEPURACIÓN - TOOLTIP - Hora Real:', reporte.horaReal);
-    console.log('DEPURACIÓN - TOOLTIP - Hora TT:', reporte.hora_tt);
-    console.log('DEPURACIÓN - TOOLTIP - Target:', reporte.target);
-    console.log('DEPURACIÓN - TOOLTIP - Motivo:', reporte.motivo);
     
     // Preparar la información para el tooltip, asegurándose de incluir
     // explícitamente la hora para que no se pierda
@@ -997,17 +988,11 @@ export const useModalManager = () => {
       motivo: reporte.motivo || ''
     };
     
-    // Incluir la hora en el contenido del tooltip para debugging
-    let contenidoExtra = '';
-    if (reporteCompleto.estado === 'si') {
-      contenidoExtra = `Hora registrada: ${reporteCompleto.horaReal || 'No disponible'}`;
-    }
-    
     // Preparar la información para el tooltip
     setTooltip({
       visible: true,
       reporte: reporteCompleto,
-      content: contenidoExtra, // Para debugging
+      content: '',
       x: rect.left + rect.width / 2,
       y: rect.top - 10
     });
