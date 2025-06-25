@@ -1,4 +1,4 @@
-// src/utils/targetMapping.js - VERSIÓN LIMPIA
+// src/utils/targetMapping.js - VERSIÓN MEJORADA
 /**
  * Sistema de mapeo entre abreviaturas de Target del frontend y valores enum del backend
  *
@@ -58,6 +58,7 @@ export const targetOptions = [
 
 /**
  * Convierte un valor enum del backend a una abreviatura del frontend
+ * VERSIÓN MEJORADA que soluciona problemas de conversión
  * 
  * @param {string} backendTarget - Valor enum del backend (ej: "Enfermedad")
  * @returns {string|null} Abreviatura del frontend (ej: "Enf") o null si no existe
@@ -65,10 +66,14 @@ export const targetOptions = [
 export const convertBackendTargetToAbbr = (backendTarget) => {
   if (!backendTarget) return null;
   
+  // Agregar log para depuración
+  console.log('DEPURACIÓN - convertBackendTargetToAbbr - Input:', backendTarget);
+  
   // 1. Verificar si existe una conversión directa
   const abreviatura = enumToTargetAbbr[backendTarget];
   
   if (abreviatura) {
+    console.log('DEPURACIÓN - convertBackendTargetToAbbr - Output (convertido):', abreviatura);
     return abreviatura;
   }
   
@@ -83,6 +88,7 @@ export const convertBackendTargetToAbbr = (backendTarget) => {
     const normalizedEnum = enumValue.toLowerCase().replace(/_/g, ' ').trim();
     
     if (normalizedEnum === normalizedInput) {
+      console.log('DEPURACIÓN - convertBackendTargetToAbbr - Output (normalizado):', abbr);
       return abbr;
     }
   }
@@ -92,6 +98,7 @@ export const convertBackendTargetToAbbr = (backendTarget) => {
     const normalizedEnum = enumValue.toLowerCase().replace(/_/g, ' ').trim();
     
     if (normalizedInput.includes(normalizedEnum) || normalizedEnum.includes(normalizedInput)) {
+      console.log('DEPURACIÓN - convertBackendTargetToAbbr - Output (coincidencia parcial):', abbr);
       return abbr;
     }
   }
@@ -113,16 +120,19 @@ export const convertBackendTargetToAbbr = (backendTarget) => {
   
   for (const [key, value] of Object.entries(specialCases)) {
     if (normalizedInput.includes(key)) {
+      console.log('DEPURACIÓN - convertBackendTargetToAbbr - Output (caso especial):', value);
       return value;
     }
   }
   
   // Si no hay coincidencia, usar el valor "Otros" como predeterminado
+  console.warn(`Advertencia: No se encontró abreviatura para el target "${backendTarget}". Usando "Otros" como valor predeterminado.`);
   return "Otros";
 };
 
 /**
  * Convierte una abreviatura del frontend a un valor enum del backend
+ * VERSIÓN MEJORADA que soluciona problemas de conversión
  * 
  * @param {string} abbr - Abreviatura del frontend (ej: "Enf")
  * @returns {string|null} Valor enum del backend (ej: "Enfermedad") o null si no existe
@@ -130,10 +140,14 @@ export const convertBackendTargetToAbbr = (backendTarget) => {
 export const convertAbbrToBackendTarget = (abbr) => {
   if (!abbr) return null;
   
+  // Agregar log para depuración
+  console.log('DEPURACIÓN - convertAbbrToBackendTarget - Input:', abbr);
+  
   // 1. Verificar si existe una conversión directa
   const enumValue = targetToBackendEnum[abbr];
   
   if (enumValue) {
+    console.log('DEPURACIÓN - convertAbbrToBackendTarget - Output:', enumValue);
     return enumValue;
   }
   
@@ -156,12 +170,68 @@ export const convertAbbrToBackendTarget = (abbr) => {
   
   for (const [key, value] of Object.entries(specialCases)) {
     if (lowerAbbr === key || lowerAbbr.includes(key)) {
+      console.log('DEPURACIÓN - convertAbbrToBackendTarget - Output (caso especial):', value);
       return value;
     }
   }
   
-  // Si no hay coincidencia, usar el valor original
+  // Si no hay coincidencia, usar el valor original pero advertir
+  console.warn(`Advertencia: No se encontró valor de backend para la abreviatura "${abbr}". Usando valor original.`);
   return abbr;
+};
+
+/**
+ * Función para depurar todos los targets y encontrar problemas
+ */
+export const debugAllTargets = () => {
+  console.log("=== MAPEO DE TARGET: FRONTEND ↔ BACKEND ===");
+  
+  console.log("\nMapeo Frontend → Backend:");
+  Object.entries(targetToBackendEnum).forEach(([abbr, enumVal]) => {
+    console.log(`  "${abbr}" → "${enumVal}"`);
+  });
+  
+  console.log("\nMapeo Backend → Frontend:");
+  Object.entries(enumToTargetAbbr).forEach(([enumVal, abbr]) => {
+    console.log(`  "${enumVal}" → "${abbr}"`);
+  });
+  
+  // Verificar consistencia
+  console.log("\nVerificando consistencia del mapeo:");
+  let inconsistenciasEncontradas = false;
+  
+  Object.entries(targetToBackendEnum).forEach(([abbr, enumVal]) => {
+    const reverseAbbr = enumToTargetAbbr[enumVal];
+    if (reverseAbbr !== abbr) {
+      console.warn(`  ❌ Inconsistencia: "${abbr}" → "${enumVal}", pero "${enumVal}" → "${reverseAbbr || 'undefined'}"`);
+      inconsistenciasEncontradas = true;
+    } else {
+      console.log(`  ✅ OK: "${abbr}" ↔ "${enumVal}"`);
+    }
+  });
+  
+  if (!inconsistenciasEncontradas) {
+    console.log("  ✅ Todas las conversiones son consistentes en ambas direcciones");
+  }
+  
+  // Probar ejemplos reales
+  console.log("\nPruebas de conversión de ejemplos reales:");
+  const testCases = [
+    "Enfermedad",
+    "Problema_tecnico",
+    "Falla_de_servicios",
+    "Tarde",
+    "Falta",
+    "Otro"
+  ];
+  
+  testCases.forEach(test => {
+    const abbr = convertBackendTargetToAbbr(test);
+    const backToEnum = convertAbbrToBackendTarget(abbr);
+    console.log(`  "${test}" → "${abbr}" → "${backToEnum}" : ${test === backToEnum ? '✅' : '❌'}`);
+  });
+  
+  return !inconsistenciasEncontradas;
 };
 
 // Export default para compatibilidad
@@ -171,5 +241,6 @@ export default {
   getTargetLabel,
   targetOptions,
   convertBackendTargetToAbbr,
-  convertAbbrToBackendTarget
+  convertAbbrToBackendTarget,
+  debugAllTargets
 };
