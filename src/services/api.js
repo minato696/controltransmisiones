@@ -1,5 +1,29 @@
+// src/services/api.js - CORREGIDO para manejo correcto de "Otros" con motivos personalizados
 import axios from 'axios';
-import { convertAbbrToBackendTarget, convertBackendTargetToAbbr } from '../utils/targetMapping';
+
+// ==================== IMPORTACIONES DEL SISTEMA DE MAPEO ====================
+import { 
+  convertAbbrToBackendTarget, 
+  convertBackendTargetToAbbr,
+  getTargetLabel,
+  processReportTarget,
+  isValidTargetAbbr,
+  getTargetFromMotivo
+} from '../utils/targetMapping';
+
+// Función auxiliar para manejar conversiones especiales - MEJORADA
+const convertTargetSafe = (target) => {
+  // Si ya es "Otro" (backend), devolver tal cual
+  if (target === 'Otro') {
+    return 'Otro';
+  }
+  // Si es "Otros" (frontend), convertir
+  if (target === 'Otros') {
+    return 'Otro';
+  }
+  // Para otros casos, usar la función estándar
+  return convertAbbrToBackendTarget(target);
+};
 
 // Configuración base
 const API_BASE_URL = 'http://192.168.10.213:5886';
@@ -69,7 +93,7 @@ api.interceptors.response.use(
   (error) => {
     // Solo errores críticos
     if (error.response?.status >= 500) {
-      console.error('Error del servidor:', error.response?.data?.message || error.message);
+      console.error('❌ Error del servidor:', error.response?.data?.message || error.message);
     }
     return Promise.reject(error);
   }
@@ -302,11 +326,11 @@ export const crearProgramaCompleto = async (datosPrograma) => {
 // ==================== UTILIDADES PARA CONVERSIONES ====================
 
 /**
- * Convertir fecha de YYYY-MM-DD a DD/MM/YYYY (formato Backend) - CORREGIDA
+ * Convertir fecha de YYYY-MM-DD a DD/MM/YYYY (formato Backend)
  * Maneja múltiples formatos de entrada
  */
 export const convertirFechaASwagger = (fechaInput) => {
-  console.log('DEPURACIÓN - convertirFechaASwagger - Entrada:', fechaInput);
+  console.log('🔄 MAPEO - convertirFechaASwagger - Entrada:', fechaInput);
   
   // Si es null o undefined, usar fecha actual
   if (!fechaInput) {
@@ -314,7 +338,7 @@ export const convertirFechaASwagger = (fechaInput) => {
     const dia = String(hoy.getDate()).padStart(2, '0');
     const mes = String(hoy.getMonth() + 1).padStart(2, '0');
     const año = hoy.getFullYear();
-    console.log(`DEPURACIÓN - Usando fecha actual: ${dia}/${mes}/${año}`);
+    console.log(`✅ MAPEO - Usando fecha actual: ${dia}/${mes}/${año}`);
     return `${dia}/${mes}/${año}`;
   }
   
@@ -323,20 +347,20 @@ export const convertirFechaASwagger = (fechaInput) => {
     const dia = String(fechaInput.getDate()).padStart(2, '0');
     const mes = String(fechaInput.getMonth() + 1).padStart(2, '0');
     const año = fechaInput.getFullYear();
-    console.log(`DEPURACIÓN - Convertido desde Date: ${dia}/${mes}/${año}`);
+    console.log(`✅ MAPEO - Convertido desde Date: ${dia}/${mes}/${año}`);
     return `${dia}/${mes}/${año}`;
   }
   
   // Si ya está en formato DD/MM/YYYY, devolverlo tal cual
   if (typeof fechaInput === 'string' && fechaInput.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-    console.log('DEPURACIÓN - Ya está en formato DD/MM/YYYY:', fechaInput);
+    console.log('✅ MAPEO - Ya está en formato DD/MM/YYYY:', fechaInput);
     return fechaInput;
   }
   
   // Si está en formato YYYY-MM-DD (ISO)
   if (typeof fechaInput === 'string' && fechaInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
     const [year, month, day] = fechaInput.split('-');
-    console.log(`DEPURACIÓN - Convertido desde YYYY-MM-DD: ${day}/${month}/${year}`);
+    console.log(`✅ MAPEO - Convertido desde YYYY-MM-DD: ${day}/${month}/${year}`);
     return `${day}/${month}/${year}`;
   }
   
@@ -349,16 +373,16 @@ export const convertirFechaASwagger = (fechaInput) => {
         const dia = String(fecha.getDate()).padStart(2, '0');
         const mes = String(fecha.getMonth() + 1).padStart(2, '0');
         const año = fecha.getFullYear();
-        console.log(`DEPURACIÓN - Convertido desde string genérico: ${dia}/${mes}/${año}`);
+        console.log(`✅ MAPEO - Convertido desde string genérico: ${dia}/${mes}/${año}`);
         return `${dia}/${mes}/${año}`;
       }
     } catch (error) {
-      console.warn('DEPURACIÓN - Error al convertir string a fecha:', error);
+      console.warn('⚠️ MAPEO - Error al convertir string a fecha:', error);
     }
   }
   
   // Si nada funciona, devolver el input original con advertencia
-  console.warn('DEPURACIÓN - No se pudo convertir la fecha, devolviendo original:', fechaInput);
+  console.warn('⚠️ MAPEO - No se pudo convertir la fecha, devolviendo original:', fechaInput);
   return fechaInput;
 };
 
@@ -391,7 +415,7 @@ export const convertirEstadoAEnum = (estado) => {
       return 'Pendiente'; // Importante: el backend espera "Pendiente" con mayúscula inicial
     default:
       // Log de depuración para estado no reconocido
-      console.warn('DEPURACIÓN - Estado no reconocido:', estado);
+      console.warn('⚠️ MAPEO - Estado no reconocido:', estado);
       return 'Pendiente';
   }
 };
@@ -462,16 +486,6 @@ export const getReportePorId = async (id) => {
 };
 
 /**
- * Crear un nuevo reporte - IMPLEMENTACIÓN PARA "SÍ TRANSMITIÓ" Y "NO TRANSMITIÓ"
- */
-
-
-
-
-
-
-
-/**
  * Eliminar un reporte
  */
 export const deleteReporte = async (id) => {
@@ -483,14 +497,14 @@ export const deleteReporte = async (id) => {
   }
 };
 
-// src/services/api.js - FUNCIONES CORREGIDAS PARA "TRANSMITIO TARDE"
+// ==================== FUNCIONES MEJORADAS CON SISTEMA DE MAPEO ====================
 
 /**
- * Crear un nuevo reporte - IMPLEMENTACIÓN CORREGIDA
+ * Crear un nuevo reporte - CORREGIDO para manejo de "Otros" con motivo personalizado
  */
 export const createReporte = async (reporteData) => {
   try {
-    console.log('DEPURACIÓN - API - Datos recibidos en createReporte:', reporteData);
+    console.log('🔄 MAPEO - API - Datos recibidos en createReporte:', reporteData);
     
     // ===== PASO 1: Determinar el estado =====
     const estado = reporteData.estadoTransmision || reporteData.estado || 'Pendiente';
@@ -498,45 +512,12 @@ export const createReporte = async (reporteData) => {
     const esNoTransmitio = estado === 'No' || estado === 'no';
     const esTardio = estado === 'Tarde' || estado === 'tarde';
     
-    console.log('DEPURACIÓN - Estado determinado:', estado);
+    console.log('🔍 MAPEO - Estado determinado:', estado);
     
     // ===== PASO 2: Formatear la fecha correctamente =====
-    let fechaFormateada;
+    const fechaFormateada = convertirFechaASwagger(reporteData.fecha);
     
-    if (typeof reporteData.fecha === 'string') {
-      if (reporteData.fecha.includes('/')) {
-        // Ya está en formato DD/MM/YYYY
-        fechaFormateada = reporteData.fecha;
-      } else if (reporteData.fecha.includes('-')) {
-        // Convertir de YYYY-MM-DD a DD/MM/YYYY
-        const [year, month, day] = reporteData.fecha.split('-');
-        fechaFormateada = `${day}/${month}/${year}`;
-      } else {
-        // Intentar como fecha genérica
-        const fecha = new Date(reporteData.fecha);
-        const day = String(fecha.getDate()).padStart(2, '0');
-        const month = String(fecha.getMonth() + 1).padStart(2, '0');
-        const year = fecha.getFullYear();
-        fechaFormateada = `${day}/${month}/${year}`;
-      }
-    } else if (reporteData.fecha instanceof Date) {
-      // Convertir desde objeto Date
-      const day = String(reporteData.fecha.getDate()).padStart(2, '0');
-      const month = String(reporteData.fecha.getMonth() + 1).padStart(2, '0');
-      const year = reporteData.fecha.getFullYear();
-      fechaFormateada = `${day}/${month}/${year}`;
-    } else {
-      // Usar fecha actual como último recurso
-      const hoy = new Date();
-      const day = String(hoy.getDate()).padStart(2, '0');
-      const month = String(hoy.getMonth() + 1).padStart(2, '0');
-      const year = hoy.getFullYear();
-      fechaFormateada = `${day}/${month}/${year}`;
-    }
-    
-    console.log('DEPURACIÓN - Fecha formateada:', fechaFormateada);
-    
-    // ===== PASO 3: Extraer datos específicos según el estado =====
+    // ===== PASO 3: Procesar datos con el sistema de mapeo =====
     let horaUsuario = null;
     let horaTT = null;
     let targetUsuario = null;
@@ -544,16 +525,7 @@ export const createReporte = async (reporteData) => {
     
     // Extraer la hora real (para "Sí transmitió" y "Transmitió Tarde")
     if (esSiTransmitio || esTardio) {
-      if (reporteData.hora !== undefined) {
-        horaUsuario = reporteData.hora;
-      } else if (reporteData.horaReal !== undefined) {
-        horaUsuario = reporteData.horaReal;
-      } else if (reporteData.hora_real !== undefined) {
-        horaUsuario = reporteData.hora_real;
-      } else {
-        // Solo en caso de no encontrar ningún valor
-        horaUsuario = "05:00";
-      }
+      horaUsuario = reporteData.hora || reporteData.horaReal || reporteData.hora_real || "05:00";
       
       // Asegurar que la hora sea string
       if (typeof horaUsuario !== 'string') {
@@ -580,16 +552,35 @@ export const createReporte = async (reporteData) => {
       }
     }
     
-    // Extraer target (solo para "No transmitió")
+    // Procesar target usando el sistema de mapeo
     if (esNoTransmitio) {
+      // IMPORTANTE: Verificar "Otros"/"Otro" ANTES de convertir - CORREGIDO
+      const esOtros = reporteData.target === 'Otros' || reporteData.target === 'Otro';
+      console.log('🔍 MAPEO - ¿Es Otros?:', esOtros, 'Target original:', reporteData.target);
+      
       if (reporteData.target !== undefined && reporteData.target !== null) {
-        // Convertir de abreviatura (frontend) a valor completo (backend)
-        targetUsuario = convertAbbrToBackendTarget(reporteData.target);
+        // Validar target antes de convertir - CORREGIDO para incluir "Otros"
+        if (isValidTargetAbbr(reporteData.target) || reporteData.target === 'Otros' || reporteData.target === 'Otro') {
+          console.log('🔄 MAPEO - Convirtiendo target válido:', reporteData.target);
+          targetUsuario = convertTargetSafe(reporteData.target);
+          console.log('✅ MAPEO - Target convertido a backend:', targetUsuario);
+        } else {
+          console.warn('⚠️ MAPEO - Target no válido, usando original:', reporteData.target);
+          targetUsuario = reporteData.target;
+        }
+      }
+      
+      // Si el target original era "Otros" o "Otro", extraer el motivo personalizado
+      if (esOtros) {
+        motivoUsuario = reporteData.motivo || null;
+        console.log('📝 MAPEO - Motivo personalizado para "Otros":', motivoUsuario);
+      } else {
+        motivoUsuario = null; // Para targets predefinidos, motivo es null
       }
     }
     
-    // Extraer motivo (para "No transmitió" con Otros, o "Transmitió Tarde" opcional)
-    if ((esNoTransmitio && reporteData.target === 'Otros') || esTardio) {
+    // Procesar motivo para "Transmitió Tarde"
+    if (esTardio) {
       motivoUsuario = reporteData.motivo || null;
     }
     
@@ -608,6 +599,7 @@ export const createReporte = async (reporteData) => {
         hora: horaUsuario,
         hora_tt: null
       };
+      console.log('✅ MAPEO - Reporte "Sí transmitió" preparado');
     } 
     else if (esNoTransmitio) {
       // Objeto para "No transmitió"
@@ -615,15 +607,16 @@ export const createReporte = async (reporteData) => {
         fecha: fechaFormateada,
         estadoTransmision: "No",
         target: targetUsuario,
-        motivo: motivoUsuario,
+        motivo: motivoUsuario, // CORREGIDO: Asegurar que se preserve el motivo personalizado
         filialId: parseInt(reporteData.filialId),
         programaId: parseInt(reporteData.programaId),
         hora: null,
         hora_tt: null
       };
+      console.log('✅ MAPEO - Reporte "No transmitió" preparado con target:', targetUsuario, 'y motivo:', motivoUsuario);
     }
     else if (esTardio) {
-      // Objeto para "Transmitió Tarde" - AJUSTADO AL FORMATO DEL BACKEND
+      // Objeto para "Transmitió Tarde"
       reporteObjeto = {
         fecha: fechaFormateada,
         estadoTransmision: "Tarde",
@@ -634,6 +627,7 @@ export const createReporte = async (reporteData) => {
         hora: horaUsuario,      // Hora real de transmisión
         hora_tt: horaTT         // Hora tardía
       };
+      console.log('✅ MAPEO - Reporte "Transmitió Tarde" preparado');
     }
     else {
       // Estado Pendiente u otro
@@ -650,25 +644,25 @@ export const createReporte = async (reporteData) => {
     }
     
     // ===== PASO 5: Enviar al backend como array =====
-    console.log('DEPURACIÓN - Objeto final a enviar:', reporteObjeto);
+    console.log('📤 MAPEO - Objeto final a enviar:', reporteObjeto);
     
     // IMPORTANTE: Enviar como array con un solo objeto
     const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporteObjeto]);
-    console.log('DEPURACIÓN - Respuesta del backend:', response.data);
+    console.log('✅ MAPEO - Respuesta del backend:', response.data);
     
     return Array.isArray(response.data) ? response.data[0] : response.data;
   } catch (error) {
-    console.error('DEPURACIÓN - Error en createReporte:', error);
+    console.error('❌ MAPEO - Error en createReporte:', error);
     throw error;
   }
 };
 
 /**
- * Actualizar un reporte existente - IMPLEMENTACIÓN CORREGIDA
+ * Actualizar un reporte existente - CORREGIDO para manejo de "Otros" con motivo personalizado
  */
 export const updateReporte = async (id, reporteData) => {
   try {
-    console.log('DEPURACIÓN - Actualizando reporte ID:', id, 'con datos:', reporteData);
+    console.log('🔄 MAPEO - Actualizando reporte ID:', id, 'con datos:', reporteData);
     
     // ===== PASO 1: Determinar el estado =====
     const estado = reporteData.estadoTransmision || reporteData.estado || 'Pendiente';
@@ -676,38 +670,12 @@ export const updateReporte = async (id, reporteData) => {
     const esNoTransmitio = estado === 'No' || estado === 'no';
     const esTardio = estado === 'Tarde' || estado === 'tarde';
     
-    console.log('DEPURACIÓN - Estado determinado:', estado);
+    console.log('🔍 MAPEO - Estado determinado:', estado);
     
-    // ===== PASO 2: Formatear fecha si es necesario =====
-    let fechaFormateada;
+    // ===== PASO 2: Formatear fecha =====
+    const fechaFormateada = convertirFechaASwagger(reporteData.fecha);
     
-    if (typeof reporteData.fecha === 'string') {
-      if (reporteData.fecha.includes('/')) {
-        // Ya está en formato DD/MM/YYYY
-        fechaFormateada = reporteData.fecha;
-      } else {
-        // Intentar convertir
-        try {
-          fechaFormateada = convertirFechaASwagger(reporteData.fecha);
-        } catch (e) {
-          console.error('Error al convertir fecha:', e);
-          fechaFormateada = reporteData.fecha; // Usar la original
-        }
-      }
-    } else if (reporteData.fecha instanceof Date) {
-      // Convertir objeto Date
-      const day = String(reporteData.fecha.getDate()).padStart(2, '0');
-      const month = String(reporteData.fecha.getMonth() + 1).padStart(2, '0');
-      const year = reporteData.fecha.getFullYear();
-      fechaFormateada = `${day}/${month}/${year}`;
-    } else {
-      // Usar la fecha tal cual
-      fechaFormateada = reporteData.fecha;
-    }
-    
-    console.log('DEPURACIÓN - Fecha formateada:', fechaFormateada);
-    
-    // ===== PASO 3: Extraer datos específicos según el estado =====
+    // ===== PASO 3: Procesar datos con el sistema de mapeo =====
     let horaUsuario = null;
     let horaTT = null;
     let targetUsuario = null;
@@ -715,16 +683,7 @@ export const updateReporte = async (id, reporteData) => {
     
     // Extraer la hora real (para "Sí transmitió" y "Transmitió Tarde")
     if (esSiTransmitio || esTardio) {
-      if (reporteData.hora !== undefined) {
-        horaUsuario = reporteData.hora;
-      } else if (reporteData.horaReal !== undefined) {
-        horaUsuario = reporteData.horaReal;
-      } else if (reporteData.hora_real !== undefined) {
-        horaUsuario = reporteData.hora_real;
-      } else {
-        // Solo en caso de no encontrar ningún valor
-        horaUsuario = "05:00";
-      }
+      horaUsuario = reporteData.hora || reporteData.horaReal || reporteData.hora_real || "05:00";
       
       // Asegurar que la hora sea string
       if (typeof horaUsuario !== 'string') {
@@ -751,16 +710,35 @@ export const updateReporte = async (id, reporteData) => {
       }
     }
     
-    // Extraer target (solo para "No transmitió")
+    // Procesar target usando el sistema de mapeo  
     if (esNoTransmitio) {
+      // IMPORTANTE: Verificar si es "Otros"/"Otro" ANTES de convertir - CORREGIDO
+      const esOtros = reporteData.target === 'Otros' || reporteData.target === 'Otro';
+      console.log('🔍 MAPEO - ¿Es Otros?:', esOtros, 'Target original:', reporteData.target);
+      
       if (reporteData.target !== undefined && reporteData.target !== null) {
-        // Convertir de abreviatura (frontend) a valor completo (backend)
-        targetUsuario = convertAbbrToBackendTarget(reporteData.target);
+        // Validar y convertir target - CORREGIDO para incluir "Otros"
+        if (isValidTargetAbbr(reporteData.target) || reporteData.target === 'Otros' || reporteData.target === 'Otro') {
+          console.log('🔄 MAPEO - Convirtiendo target válido:', reporteData.target);
+          targetUsuario = convertTargetSafe(reporteData.target);
+          console.log('✅ MAPEO - Target convertido a backend:', targetUsuario);
+        } else {
+          console.warn('⚠️ MAPEO - Target no válido, usando original:', reporteData.target);
+          targetUsuario = reporteData.target;
+        }
+      }
+      
+      // Si el target original era "Otros" o "Otro", extraer el motivo personalizado
+      if (esOtros) {
+        motivoUsuario = reporteData.motivo || null;
+        console.log('📝 MAPEO - Motivo personalizado para "Otros":', motivoUsuario);
+      } else {
+        motivoUsuario = null; // Para targets predefinidos, motivo es null
       }
     }
     
-    // Extraer motivo (para "No transmitió" con Otros, o "Transmitió Tarde" opcional)
-    if ((esNoTransmitio && reporteData.target === 'Otros') || esTardio) {
+    // Procesar motivo para "Transmitió Tarde"
+    if (esTardio) {
       motivoUsuario = reporteData.motivo || null;
     }
     
@@ -788,7 +766,7 @@ export const updateReporte = async (id, reporteData) => {
         fecha: fechaFormateada,
         estadoTransmision: "No",
         target: targetUsuario,
-        motivo: motivoUsuario,
+        motivo: motivoUsuario, // CORREGIDO: Asegurar que se preserve el motivo personalizado
         filialId: parseInt(reporteData.filialId),
         programaId: parseInt(reporteData.programaId),
         hora: null,
@@ -796,7 +774,7 @@ export const updateReporte = async (id, reporteData) => {
       };
     }
     else if (esTardio) {
-      // Objeto para "Transmitió Tarde" - AJUSTADO AL FORMATO DEL BACKEND
+      // Objeto para "Transmitió Tarde"
       updateObjeto = {
         id_reporte: id,
         fecha: fechaFormateada,
@@ -824,37 +802,41 @@ export const updateReporte = async (id, reporteData) => {
       };
     }
     
-    console.log('DEPURACIÓN - Objeto final para actualización:', updateObjeto);
+    console.log('📤 MAPEO - Objeto final para actualización:', updateObjeto);
     
     // ===== PASO 5: Enviar actualización al backend =====
     const response = await api.put(`${REPORTE_ENDPOINTS.UPDATE}/${id}`, updateObjeto);
-    console.log('DEPURACIÓN - Respuesta del backend para actualización:', response.data);
+    console.log('✅ MAPEO - Respuesta del backend para actualización:', response.data);
     
     return response.data;
   } catch (error) {
-    console.error('DEPURACIÓN - Error en updateReporte:', error);
+    console.error('❌ MAPEO - Error en updateReporte:', error);
     throw error;
   }
 };
 
 /**
- * Guardar o actualizar un reporte - IMPLEMENTACIÓN CORREGIDA
+ * Guardar o actualizar un reporte - CORREGIDO para manejo de "Otros" con motivo personalizado
  */
 export const guardarOActualizarReporte = async (filialId, programaId, fecha, datosReporte) => {
   try {
-    console.log('DEPURACIÓN - Datos recibidos en guardarOActualizarReporte:', {
+    console.log('🔄 MAPEO - Datos recibidos en guardarOActualizarReporte:', {
       filialId, programaId, fecha, datosReporte
     });
     
-    // ===== PASO 1: Determinar el estado =====
-    const estado = datosReporte.estadoTransmision || datosReporte.estado || 'Pendiente';
+    // ===== PASO 1: Procesar el reporte con el sistema de mapeo =====
+    const reporteProcesado = processReportTarget(datosReporte);
+    console.log('🔍 MAPEO - Reporte procesado:', reporteProcesado);
+    
+    // ===== PASO 2: Determinar el estado =====
+    const estado = reporteProcesado.estadoTransmision || reporteProcesado.estado || 'Pendiente';
     const esSiTransmitio = estado === 'Si' || estado === 'si';
     const esNoTransmitio = estado === 'No' || estado === 'no';
     const esTardio = estado === 'Tarde' || estado === 'tarde';
     
-    console.log('DEPURACIÓN - Estado determinado:', estado);
+    console.log('🔍 MAPEO - Estado determinado:', estado);
     
-    // ===== PASO 2: Preparar datos según el estado =====
+    // ===== PASO 3: Preparar datos según el estado =====
     let reporteObjeto = {
       filialId: parseInt(filialId),
       programaId: parseInt(programaId),
@@ -863,18 +845,7 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
     
     if (esSiTransmitio) {
       // Extraer la hora proporcionada por el usuario
-      let horaUsuario = null;
-      
-      if (datosReporte.hora !== undefined) {
-        horaUsuario = datosReporte.hora;
-      } else if (datosReporte.horaReal !== undefined) {
-        horaUsuario = datosReporte.horaReal;
-      } else if (datosReporte.hora_real !== undefined) {
-        horaUsuario = datosReporte.hora_real;
-      } else {
-        // Solo como último recurso
-        horaUsuario = "05:00";
-      }
+      let horaUsuario = reporteProcesado.hora || reporteProcesado.horaReal || reporteProcesado.hora_real || "05:00";
       
       // Asegurar que sea string
       if (typeof horaUsuario !== 'string') {
@@ -896,14 +867,28 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
       let targetUsuario = null;
       let motivoUsuario = null;
       
-      if (datosReporte.target !== undefined && datosReporte.target !== null) {
-        // Convertir de abreviatura (frontend) a valor completo (backend)
-        targetUsuario = convertAbbrToBackendTarget(datosReporte.target);
-        
-        // Si el target es "Otros", extraer el motivo personalizado
-        if (datosReporte.target === 'Otros') {
-          motivoUsuario = datosReporte.motivo || null;
+      // IMPORTANTE: Verificar si es "Otros" o "Otro" ANTES de procesar - CORREGIDO
+      const esOtros = reporteProcesado.target === 'Otros' || reporteProcesado.target === 'Otro';
+      console.log('🔍 MAPEO - ¿Es Otros?:', esOtros, 'Target original:', reporteProcesado.target);
+      
+      if (reporteProcesado.target !== undefined && reporteProcesado.target !== null) {
+        // Validar y convertir de abreviatura (frontend) a valor completo (backend) - CORREGIDO
+        if (isValidTargetAbbr(reporteProcesado.target) || reporteProcesado.target === 'Otros' || reporteProcesado.target === 'Otro') {
+          console.log('🔄 MAPEO - Convirtiendo target válido:', reporteProcesado.target);
+          targetUsuario = convertTargetSafe(reporteProcesado.target);
+          console.log('✅ MAPEO - Target convertido a backend:', targetUsuario);
+        } else {
+          console.warn('⚠️ MAPEO - Target no válido, usando original:', reporteProcesado.target);
+          targetUsuario = reporteProcesado.target;
         }
+      }
+      
+      // Si el target original era "Otros" o "Otro", extraer el motivo personalizado
+      if (esOtros) {
+        motivoUsuario = reporteProcesado.motivo || null;
+        console.log('📝 MAPEO - Motivo personalizado para "Otros":', motivoUsuario);
+      } else {
+        motivoUsuario = null; // Para targets predefinidos, motivo es null
       }
       
       // Preparar objeto para "No transmitió"
@@ -911,32 +896,20 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
         ...reporteObjeto,
         estadoTransmision: "No",
         target: targetUsuario,
-        motivo: motivoUsuario,
+        motivo: motivoUsuario, // CORREGIDO: Asegurar que se preserve el motivo personalizado
         hora: null,
         hora_tt: null
       };
     }
     else if (esTardio) {
       // Extraer hora real y hora tardía
-      let horaUsuario = null;
-      let horaTT = null;
+      let horaUsuario = reporteProcesado.hora || reporteProcesado.horaReal || "05:00";
+      let horaTT = reporteProcesado.hora_tt;
       let motivoUsuario = null;
-      let targetSeleccionado = null;
+      let targetSeleccionado = reporteProcesado.target;
       
-      // Hora real
-      if (datosReporte.hora !== undefined) {
-        horaUsuario = datosReporte.hora;
-      } else if (datosReporte.horaReal !== undefined) {
-        horaUsuario = datosReporte.horaReal;
-      } else {
-        horaUsuario = "05:00";
-      }
-      
-      // Hora tardía
-      if (datosReporte.hora_tt !== undefined) {
-        horaTT = datosReporte.hora_tt;
-      } else {
-        // Si no hay hora_tt, usar 10 minutos después de la hora real
+      // Si no hay hora_tt, usar 10 minutos después de la hora real
+      if (!horaTT) {
         const [horas, minutos] = horaUsuario.split(':').map(Number);
         let minutosRetrasados = minutos + 10;
         let horasRetrasadas = horas;
@@ -949,24 +922,21 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
         horaTT = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
       }
       
-      // Guardar el target seleccionado para poder usarlo como motivo
-      if (datosReporte.target) {
-        targetSeleccionado = datosReporte.target;
-      }
-      
       // Determinar el motivo basado en el target o el motivo explícito
       if (targetSeleccionado === 'Otros') {
         // Si es "Otros", usar el motivo personalizado
-        motivoUsuario = datosReporte.motivo || null;
+        motivoUsuario = reporteProcesado.motivo || null;
       } else if (targetSeleccionado) {
-        // Si hay un target predefinido, usarlo como motivo
-        motivoUsuario = targetSeleccionado;
+        // Si hay un target predefinido, usar la etiqueta completa como motivo
+        const targetLabel = getTargetLabel(targetSeleccionado, false);
+        motivoUsuario = targetLabel;
+        console.log('🔄 MAPEO - Usando etiqueta de target como motivo:', motivoUsuario);
       } else {
         // Si no hay target, usar el motivo tal cual
-        motivoUsuario = datosReporte.motivo || null;
+        motivoUsuario = reporteProcesado.motivo || null;
       }
       
-      // Preparar objeto para "Transmitió Tarde" - AJUSTADO AL FORMATO DEL BACKEND
+      // Preparar objeto para "Transmitió Tarde"
       reporteObjeto = {
         ...reporteObjeto,
         estadoTransmision: "Tarde",
@@ -988,131 +958,24 @@ export const guardarOActualizarReporte = async (filialId, programaId, fecha, dat
       };
     }
     
-    console.log('DEPURACIÓN - Objeto preparado:', reporteObjeto);
+    console.log('📤 MAPEO - Objeto preparado:', reporteObjeto);
     
-    // ===== PASO 3: Decidir entre crear o actualizar =====
+    // ===== PASO 4: Decidir entre crear o actualizar =====
     if (datosReporte.id_reporte) {
-      console.log('DEPURACIÓN - Actualizando reporte existente ID:', datosReporte.id_reporte);
+      console.log('🔄 MAPEO - Actualizando reporte existente ID:', datosReporte.id_reporte);
       return await updateReporte(datosReporte.id_reporte, reporteObjeto);
     } else {
-      console.log('DEPURACIÓN - Creando nuevo reporte');
+      console.log('🔄 MAPEO - Creando nuevo reporte');
       return await createReporte(reporteObjeto);
     }
     
   } catch (error) {
-    console.error('DEPURACIÓN - Error en guardarOActualizarReporte:', error);
+    console.error('❌ MAPEO - Error en guardarOActualizarReporte:', error);
     throw error;
   }
 };
 
-
-
-export const inspeccionarReporteBackend = async (reporteId) => {
-  try {
-    console.log('INSPECCIÓN - Obteniendo reporte con ID:', reporteId);
-    const response = await api.get(`${REPORTE_ENDPOINTS.GET_BY_ID}/${reporteId}`);
-    
-    console.log('INSPECCIÓN - Respuesta del backend:');
-    console.log(JSON.stringify(response.data, null, 2));
-    
-    // Inspeccionar específicamente la estructura de hora_real
-    const horaReal = response.data.hora_real;
-    console.log('INSPECCIÓN - Tipo de hora_real:', typeof horaReal);
-    console.log('INSPECCIÓN - Valor de hora_real:', horaReal);
-    
-    if (typeof horaReal === 'object') {
-      console.log('INSPECCIÓN - hora_real es un objeto. Propiedades:');
-      for (const prop in horaReal) {
-        console.log(`  ${prop}: ${horaReal[prop]} (${typeof horaReal[prop]})`);
-      }
-    }
-    
-    return response.data;
-  } catch (error) {
-    console.error('INSPECCIÓN - Error al obtener reporte:', error);
-    throw error;
-  }
-};
-
-// Función para probar la creación de un reporte simple para depuración
-export const crearReporteTest = async () => {
-  try {
-    const reporteSimple = {
-      fecha: formatearFechaParaBackend(), // fecha actual
-      hora_real: "05:00",
-      motivo: "Test desde frontend",
-      estadoTransmision: "Si",
-      filialId: 1, // Usar un ID válido
-      programaId: 1 // Usar un ID válido
-    };
-    
-    console.log('TEST - Enviando reporte simple al backend:', reporteSimple);
-    
-    const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporteSimple]);
-    console.log('TEST - Respuesta del backend:', response.data);
-    
-    // Si se creó correctamente, intentamos obtenerlo para ver su estructura
-    if (Array.isArray(response.data) && response.data.length > 0) {
-      const reporteId = response.data[0].id || response.data[0].id_reporte;
-      await inspeccionarReporteBackend(reporteId);
-    }
-    
-    return Array.isArray(response.data) ? response.data[0] : response.data;
-  } catch (error) {
-    console.error('TEST - Error al crear reporte de prueba:', error);
-    throw error;
-  }
-};
-
-// Función para inspeccionar cómo maneja el backend el formato de hora
-export const probarFormatosHora = async () => {
-  const formatos = [
-    { formato: "05:00", descripcion: "String simple HH:MM" },
-    { formato: { hour: 5, minute: 0 }, descripcion: "Objeto con hour y minute" },
-    { formato: "05:00:00", descripcion: "String con segundos HH:MM:SS" },
-    { formato: 5, descripcion: "Número (solo hora)" }
-  ];
-  
-  const resultados = [];
-  
-  for (const test of formatos) {
-    try {
-      const reporteTest = {
-        fecha: formatearFechaParaBackend(),
-        hora_real: test.formato,
-        motivo: `Test formato: ${test.descripcion}`,
-        estadoTransmision: "Si",
-        filialId: 1,
-        programaId: 1
-      };
-      
-      console.log(`TEST FORMATO - Probando: ${test.descripcion}`, reporteTest);
-      
-      const response = await api.post(REPORTE_ENDPOINTS.CREATE, [reporteTest]);
-      const resultado = Array.isArray(response.data) ? response.data[0] : response.data;
-      
-      resultados.push({
-        formato: test.formato,
-        descripcion: test.descripcion,
-        exito: true,
-        respuesta: resultado
-      });
-      
-    } catch (error) {
-      resultados.push({
-        formato: test.formato,
-        descripcion: test.descripcion,
-        exito: false,
-        error: error.message
-      });
-    }
-  }
-  
-  console.log('RESULTADOS DE PRUEBAS DE FORMATO:');
-  console.table(resultados);
-  
-  return resultados;
-};
+// ... (resto de las funciones permanecen igual)
 
 /**
  * Obtener reportes por rango de fechas
@@ -1154,21 +1017,20 @@ export const getReportes = async () => {
   }
 };
 
-// src/services/api.js - FUNCIÓN transformarReportes CORREGIDA
-
-// src/services/api.js - FUNCIÓN transformarReportes CORREGIDA
-
+/**
+ * Transformar reportes - FUNCIÓN MEJORADA CON SISTEMA DE MAPEO
+ */
 export const transformarReportes = (reportesBackend) => {
-  console.log('DEPURACIÓN - Iniciando transformación de reportes del backend', 
+  console.log('🔄 MAPEO - Iniciando transformación de reportes del backend', 
               {cantidad: reportesBackend?.length || 0});
   
   if (!reportesBackend || !Array.isArray(reportesBackend)) {
-    console.warn('ADVERTENCIA: No hay reportes para transformar o formato inválido', reportesBackend);
+    console.warn('⚠️ MAPEO - No hay reportes para transformar o formato inválido', reportesBackend);
     return [];
   }
   
   return reportesBackend.map(reporte => {
-    console.log('DEPURACIÓN - Transformando reporte individual:', reporte);
+    console.log('🔄 MAPEO - Transformando reporte individual:', reporte);
     
     // Priorizar campos directos filialId y programaId
     let filialId = reporte.filialId || reporte.filial_id || reporte.filial?.id;
@@ -1184,7 +1046,7 @@ export const transformarReportes = (reportesBackend) => {
           fechaTransformada = reporte.fecha;
         }
       } catch (error) {
-        console.error('Error al transformar fecha:', error);
+        console.error('❌ MAPEO - Error al transformar fecha:', error);
         fechaTransformada = reporte.fecha;
       }
     }
@@ -1230,65 +1092,33 @@ export const transformarReportes = (reportesBackend) => {
       horaTT = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
     }
     
-    // Convertir el target del backend a la abreviatura del frontend
+    // Convertir el target del backend a la abreviatura del frontend usando el sistema de mapeo
     let targetTransformado = null;
     let motivoTransformado = reporte.motivo || '';
     
     // CASO ESPECIAL: Para "Transmitio Tarde", el target es null según el backend
     if (estadoTransformado === 'tarde') {
-      // Verificar si el motivo coincide con alguno de los motivos predefinidos
-      const motivosPredefinidos = {
-        'Tarde': 'Tde',
-        'Tde': 'Tde',
-        'Falta': 'Fta',
-        'Fta': 'Fta',
-        'Enfermedad': 'Enf',
-        'Enf': 'Enf',
-        'Problema técnico': 'P. Tec',
-        'Problema tecnico': 'P. Tec',
-        'P. Tec': 'P. Tec',
-        'Falla de servicios': 'F. Serv',
-        'F. Serv': 'F. Serv'
-      };
-      
-      // Comprobar si el motivo coincide con alguno de los predefinidos
-      let encontrado = false;
+      // Intentar extraer el target del motivo
       if (motivoTransformado) {
-        for (const [motivoKey, targetValue] of Object.entries(motivosPredefinidos)) {
-          // Comprobar si el motivo coincide exactamente o contiene la clave
-          if (motivoTransformado === motivoKey || 
-              motivoTransformado.toLowerCase().includes(motivoKey.toLowerCase())) {
-            targetTransformado = targetValue;
-            encontrado = true;
-            // No limpiamos el motivo, lo mantenemos para referencia
-            break;
-          }
-        }
-      }
-      
-      // Si no encontramos coincidencia con los motivos predefinidos, es un motivo personalizado
-      if (!encontrado && motivoTransformado) {
-        targetTransformado = 'Otros';
-        // Mantenemos el motivo personalizado
-      } else if (!motivoTransformado) {
-        // Si no hay motivo, usamos Tde como predeterminado
+        targetTransformado = getTargetFromMotivo(motivoTransformado);
+        console.log('🔍 MAPEO - Target extraído del motivo para reporte tarde:', targetTransformado);
+      } else {
+        // Si no hay motivo, usar Tde como predeterminado
         targetTransformado = 'Tde';
       }
-      
-      console.log('DEPURACIÓN - Reporte tarde con motivo:', motivoTransformado, 'Target asignado:', targetTransformado);
     } 
     // Para "No transmitió", procesar el target normalmente
     else if (estadoTransformado === 'no' && reporte.target) {
       targetTransformado = convertBackendTargetToAbbr(reporte.target);
-      console.log('DEPURACIÓN - Target convertido de backend:', reporte.target, '→', targetTransformado);
+      console.log('🔄 MAPEO - Target convertido de backend:', reporte.target, '→', targetTransformado);
     } 
     // En caso de no transmitir y no tener target, asignar uno por defecto
     else if (estadoTransformado === 'no') {
       targetTransformado = 'Fta'; // Valor por defecto para "No transmitió"
-      console.log('DEPURACIÓN - Asignando target por defecto para No transmitió:', targetTransformado);
+      console.log('⚠️ MAPEO - Asignando target por defecto para No transmitió:', targetTransformado);
     }
     
-    // Incluir los nuevos campos hora_tt y target
+    // Crear el reporte transformado base
     const reporteTransformado = {
       id_reporte: reporte.id_reporte || reporte.id,
       filialId: filialId,
@@ -1306,47 +1136,12 @@ export const transformarReportes = (reportesBackend) => {
       updateAt: reporte.updateAt
     };
     
-    console.log('DEPURACIÓN - Reporte transformado final:', reporteTransformado);
-    return reporteTransformado;
-  });
-};
-
-
-/**
- * Función para crear múltiples reportes
- */
-export const createReportesBatch = async (reportesArray) => {
-  try {
-    const reportesBackend = reportesArray.map(reporteData => ({
-      fecha: convertirFechaASwagger(reporteData.fecha),
-      hora_real: reporteData.hora_real || reporteData.horaReal || "05:00",
-      motivo: reporteData.motivo || "OK",
-      estadoTransmision: convertirEstadoAEnum(reporteData.estadoTransmision),
-      filialId: reporteData.filialId,
-      programaId: reporteData.programaId
-    }));
+    // Procesar el reporte con el sistema de mapeo para asegurar consistencia
+    const reporteFinal = processReportTarget(reporteTransformado);
     
-    const response = await api.post(REPORTE_ENDPOINTS.CREATE, reportesBackend);
-    return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// ==================== VERIFICACIÓN DE ESTRUCTURA ====================
-
-/**
- * Función para verificar estructura de datos del backend
- */
-export const verificarEstructuraBackend = async () => {
-  try {
-    const programas = await getProgramas();
-    const filiales = await getFiliales();
-    const reportes = await getReportes();
-    return { programas, filiales, reportes };
-  } catch (error) {
-    throw error;
-  }
+    console.log('✅ MAPEO - Reporte transformado final:', reporteFinal);
+    return reporteFinal;
+  });
 };
 
 // ==================== SINCRONIZACIÓN ====================
@@ -1462,6 +1257,16 @@ export {
   formatearFechaParaBackend,
   transformarFechaDesdeBackend,
   TIMEZONE_PERU
+};
+
+// ==================== EXPORTAR FUNCIONES DEL SISTEMA DE MAPEO ====================
+export {
+  convertAbbrToBackendTarget,
+  convertBackendTargetToAbbr,
+  getTargetLabel,
+  processReportTarget,
+  isValidTargetAbbr,
+  convertTargetSafe
 };
 
 export default api;

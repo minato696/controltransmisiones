@@ -1,5 +1,5 @@
-// src/components/GestorDatos.js
-import { useState, useEffect } from 'react';
+// src/components/GestorDatos.js - OPTIMIZADO PARA RENDIMIENTO - COMPLETO Y ACTUALIZADO
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   getProgramasTransformados, 
   getFilialesTransformadas,
@@ -18,8 +18,21 @@ import {
   generarClaveNota
 } from './UtilidadesFecha';
 
+// ==================== IMPORTACIONES DEL SISTEMA DE MAPEO ====================
+import { 
+  convertAbbrToBackendTarget,
+  convertBackendTargetToAbbr,
+  getTargetLabel,
+  getTargetForEstado,
+  processReportTarget,
+  isValidTargetAbbr,
+  getTargetFromMotivo,
+  targetToFullLabel
+} from '../utils/targetMapping';
+
 /**
- * Hook personalizado para manejo de datos y estado del sistema
+ * Hook personalizado OPTIMIZADO para manejo de datos y estado del sistema
+ * Reducción significativa de llamadas al sistema de mapeo
  */
 
 export const useGestorDatos = ({ 
@@ -55,52 +68,76 @@ export const useGestorDatos = ({
   const [notasGenerales, setNotasGenerales] = useState({});
   const [guardandoNota, setGuardandoNota] = useState(false);
 
-  // ==================== INICIALIZACIÓN ====================
+  // ==================== MEMOIZACIÓN PARA OPTIMIZACIÓN ====================
   
-  useEffect(() => {
-    inicializarDatos();
+  // Memoizar la función obtenerEstadoReporte para evitar recálculos innecesarios - CORREGIDA
+  const obtenerEstadoReporte = useCallback((filialId, programaId, fecha) => {
+    // Verificar parámetros con logging mínimo
+    if (!filialId || !programaId || !fecha) {
+      return { estado: 'pendiente', motivo: '', horaReal: '', target: '', hora_tt: '', observaciones: '' };
+    }
+
+    // Generar clave para buscar en el objeto de reportes
+    const clave = generarClave(filialId, programaId, fecha);
     
-    // Actualizar fecha actual cada minuto
-    const intervalId = setInterval(() => {
-      const fechaActual = obtenerFechaLocal();
-    }, 60000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  // Actualizar datos cuando cambian los props del backend
-  useEffect(() => {
-    if (programasBackend.length > 0 || filialesBackend.length > 0) {
-      actualizarDatosDesdeBackend();
+    // Buscar el reporte en la estructura local
+    const reporteLocal = reportes[clave];
+    const reporteBackendId = reportesBackend[clave];
+    
+    // Solo hacer logging si hay debugging activo
+    const debugEnabled = false; // Cambiar a true solo para debugging
+    if (debugEnabled) {
+      console.log(`🔍 MAPEO - obtenerEstadoReporte para clave: ${clave}`);
     }
-  }, [programasBackend.length, filialesBackend.length]);
-
-  // Asegurar programa activo cuando hay datos disponibles
-  useEffect(() => {
-    if (!programaActivo && (programas.length > 0 || programasBackend.length > 0)) {
-      const programasAUsar = programas.length > 0 ? programas : programasBackend;
-      if (programasAUsar.length > 0) {
-        setProgramaActivo(programasAUsar[0]);
+    
+    // Si encontramos un reporte local, lo devolvemos procesado
+    if (reporteLocal) {
+      // Asegurarse que todas las propiedades existan
+      const reporteCompleto = {
+        estado: reporteLocal.estado || 'pendiente',
+        motivo: reporteLocal.motivo || '',
+        horaReal: reporteLocal.horaReal || '',
+        hora_tt: reporteLocal.hora_tt || '',
+        target: reporteLocal.target || '',
+        observaciones: reporteLocal.observaciones || '',
+        id_reporte: reporteBackendId
+      };
+      
+      // CORREGIDO: SIEMPRE procesar con sistema de mapeo para asegurar transformaciones
+      let reporteFinal = processReportTarget(reporteCompleto);
+      
+      // TRANSFORMACIÓN ESPECÍFICA: "Otro" del backend → "Otros" del frontend
+      if (reporteFinal.target === 'Otro') {
+        reporteFinal = {
+          ...reporteFinal,
+          target: 'Otros'
+        };
+        if (debugEnabled) {
+          console.log('🔄 MAPEO - Target transformado de "Otro" a "Otros"');
+        }
       }
+      
+      if (debugEnabled) {
+        console.log('✅ MAPEO - Devolviendo reporte procesado:', reporteFinal);
+      }
+      return reporteFinal;
     }
-  }, [programas.length, programasBackend.length, programaActivo]);
-
-  // Cargar reportes cuando cambia programa o fecha
-  useEffect(() => {
-    const cargarReportesConDelay = async () => {
-      if (programaActivo && estadoConexion?.connected) {
-        setTimeout(async () => {
-          await cargarReportesDesdeBackend();
-        }, 100);
-      }
+    
+    // Si no hay reporte local, crear uno predeterminado
+    return { 
+      estado: 'pendiente', 
+      motivo: '', 
+      horaReal: '',
+      hora_tt: '',
+      target: '',
+      observaciones: '',
+      id_reporte: reporteBackendId
     };
-    
-    cargarReportesConDelay();
-  }, [programaActivo?.id, fechaSeleccionada.getTime(), estadoConexion?.connected]);
+  }, [reportes, reportesBackend]); // Solo depende de reportes y reportesBackend
 
-  // ==================== FUNCIONES DE INICIALIZACIÓN ====================
+  // ==================== FUNCIONES DE INICIALIZACIÓN OPTIMIZADAS ====================
   
-  const inicializarDatos = async () => {
+  const inicializarDatos = useCallback(async () => {
     if (programasBackend.length > 0 || filialesBackend.length > 0) {
       actualizarDatosDesdeBackend();
       setLoading(false);
@@ -119,9 +156,9 @@ export const useGestorDatos = ({
         setLoading(false);
       }
     }
-  };
+  }, [programasBackend.length, filialesBackend.length, estadoConexion?.connected]);
 
-  const cargarDatosDelBackend = async () => {
+  const cargarDatosDelBackend = useCallback(async () => {
     try {
       setSincronizando(true);
       
@@ -144,9 +181,9 @@ export const useGestorDatos = ({
     } finally {
       setSincronizando(false);
     }
-  };
+  }, [programaActivo]);
 
-  const actualizarDatosDesdeBackend = () => {
+  const actualizarDatosDesdeBackend = useCallback(() => {
     let datosActualizados = false;
 
     if (programasBackend.length > 0) {
@@ -169,9 +206,9 @@ export const useGestorDatos = ({
       setUltimaActualizacion(obtenerFechaLocal());
       setLoading(false);
     }
-  };
+  }, [programasBackend, filialesBackend, programaActivo]);
 
-  const cargarDatosLocales = async () => {
+  const cargarDatosLocales = useCallback(async () => {
     try {
       setProgramas([]);
       setFiliales([]);
@@ -180,287 +217,185 @@ export const useGestorDatos = ({
     } catch (error) {
       // Silencioso
     }
-  };
+  }, []);
 
-  // Mejora para la función cargarReportesDesdeBackend en GestorDatos.js
-// Reemplaza esta función en el archivo GestorDatos.js
+  // ==================== FUNCIÓN OPTIMIZADA PARA CARGAR REPORTES ====================
+  
+  const cargarReportesDesdeBackend = useCallback(async () => {
+    try {
+      if (!programaActivo || !estadoConexion?.connected) {
+        console.warn('No se pueden cargar reportes: no hay programa activo o no hay conexión');
+        return;
+      }
 
-const cargarReportesDesdeBackend = async () => {
-  try {
-    if (!programaActivo || !estadoConexion?.connected) {
-      console.warn('No se pueden cargar reportes: no hay programa activo o no hay conexión');
-      return;
-    }
-
-    setCargandoReportes(true);
-    
-    // Obtener fechas para consulta
-    const semanaActual = getSemanaFromDate(fechaSeleccionada);
-    const fechaInicio = formatearFechaParaBackendReporte(semanaActual.inicio);
-    const fechaFin = formatearFechaParaBackendReporte(semanaActual.fin);
-    
-    console.log(`DEPURACIÓN - Cargando reportes para semana ${fechaInicio} al ${fechaFin}`);
-    
-    // Obtener reportes del backend
-    const reportesData = await getReportesPorFechas(fechaInicio, fechaFin);
-    console.log('DEPURACIÓN - Reportes obtenidos del backend:', reportesData);
-    
-    if (!reportesData || reportesData.length === 0) {
-      console.log('No se encontraron reportes para el período seleccionado');
-      setCargandoReportes(false);
-      return;
-    }
-    
-    // Procesar reportes
-    const reportesMap = {};
-    const reportesBackendMap = {};
-    
-    // Procesar todos los reportes, no solo los del programa actual
-    // para mantener consistencia al cambiar de programa
-    reportesData.forEach(reporte => {
-      // Validar que el reporte tenga datos mínimos
-      if (!reporte.filialId || !reporte.fecha) {
-        console.warn('ADVERTENCIA: Reporte con datos incompletos:', reporte);
+      setCargandoReportes(true);
+      
+      // Obtener fechas para consulta
+      const semanaActual = getSemanaFromDate(fechaSeleccionada);
+      const fechaInicio = formatearFechaParaBackendReporte(semanaActual.inicio);
+      const fechaFin = formatearFechaParaBackendReporte(semanaActual.fin);
+      
+      console.log(`🔄 CARGA - Reportes para semana ${fechaInicio} al ${fechaFin}`);
+      
+      // Obtener reportes del backend
+      const reportesData = await getReportesPorFechas(fechaInicio, fechaFin);
+      
+      if (!reportesData || reportesData.length === 0) {
+        console.log('No se encontraron reportes para el período seleccionado');
+        setCargandoReportes(false);
         return;
       }
       
-      try {
-        const fechaObj = new Date(reporte.fecha + 'T00:00:00');
-        const clave = generarClave(reporte.filialId, reporte.programaId, fechaObj);
-        
-        // Verificar que la transformación del target sea correcta
-        if (reporte.estado === 'no' && !reporte.target && reporte.target !== '') {
-          console.warn('ADVERTENCIA: Reporte "no transmitió" sin target:', reporte);
-          
-          // Si es "no transmitió" y no tiene target, asignar uno por defecto
-          if (!reporte.target) {
-            reporte.target = 'Fta'; // Abreviatura para "Falta"
-            console.log('DEPURACIÓN - Asignando target por defecto:', reporte.target);
-          }
+      // Procesar reportes CON MAPEO COMPLETO - CORREGIDO
+      const reportesMap = {};
+      const reportesBackendMap = {};
+      
+      reportesData.forEach(reporte => {
+        // Validar que el reporte tenga datos mínimos
+        if (!reporte.filialId || !reporte.fecha) {
+          return;
         }
         
-        // Guardar reporte en el mapa
-        reportesMap[clave] = {
-          estado: reporte.estado || 'pendiente',
-          motivo: reporte.motivo || '',
-          horaReal: reporte.horaReal || '',
-          hora_tt: reporte.hora_tt || '',
-          target: reporte.target || '',
-          observaciones: reporte.observaciones || ''
+        try {
+          const fechaObj = new Date(reporte.fecha + 'T00:00:00');
+          const clave = generarClave(reporte.filialId, reporte.programaId, fechaObj);
+          
+          // PROCESAMIENTO COMPLETO CON TRANSFORMACIONES
+          let reporteProcesado = { ...reporte };
+          
+          // TRANSFORMACIÓN ESPECÍFICA: "Otro" del backend → "Otros" del frontend
+          if (reporteProcesado.target === 'Otro') {
+            reporteProcesado.target = 'Otros';
+            console.log('🔄 MAPEO - Transformando "Otro" a "Otros" en carga');
+          }
+          
+          // Aplicar procesamiento del sistema de mapeo
+          reporteProcesado = processReportTarget(reporteProcesado);
+          
+          // Guardar reporte en el mapa
+          reportesMap[clave] = {
+            estado: reporteProcesado.estado || 'pendiente',
+            motivo: reporteProcesado.motivo || '',
+            horaReal: reporteProcesado.horaReal || '',
+            hora_tt: reporteProcesado.hora_tt || '',
+            target: reporteProcesado.target || '',
+            observaciones: reporteProcesado.observaciones || ''
+          };
+          
+          // Guardar ID del reporte para referencia
+          if (reporte.id_reporte) {
+            reportesBackendMap[clave] = reporte.id_reporte;
+          }
+          
+        } catch (error) {
+          console.error('❌ Error al procesar reporte individual:', error);
+        }
+      });
+      
+      // Actualizar estados de una sola vez
+      setReportes(prevReportes => ({ ...prevReportes, ...reportesMap }));
+      setReportesBackend(prevBackend => ({ ...prevBackend, ...reportesBackendMap }));
+      
+      console.log(`✅ CARGA - ${Object.keys(reportesMap).length} reportes cargados`);
+      
+    } catch (error) {
+      console.error('❌ Error al cargar reportes desde backend:', error);
+    } finally {
+      setCargandoReportes(false);
+    }
+  }, [programaActivo?.id, fechaSeleccionada, estadoConexion?.connected]);
+
+  // ==================== FUNCIÓN OPTIMIZADA PARA ACTUALIZAR REPORTES ====================
+  
+  const actualizarReporte = useCallback(async (filialId, programaId, fecha, nuevoEstado) => {
+    const clave = generarClave(filialId, programaId, fecha);
+    
+    try {
+      console.log('🔄 ACTUALIZAR - Reporte:', { filialId, programaId, fecha, estado: nuevoEstado.estado });
+      
+      // Procesar el estado con mapeo MÍNIMO
+      let estadoProcesado = { ...nuevoEstado };
+      
+      // Solo aplicar procesamiento de mapeo si es necesario
+      if ((nuevoEstado.estado === 'no' || nuevoEstado.estado === 'tarde') && 
+          (!nuevoEstado.target || nuevoEstado.target === '')) {
+        estadoProcesado = processReportTarget(nuevoEstado);
+      }
+      
+      // Actualizar estado local inmediatamente
+      setReportes(prev => ({
+        ...prev,
+        [clave]: estadoProcesado
+      }));
+
+      // Si hay conexión, guardar en el backend
+      if (estadoConexion?.connected) {
+        setGuardandoReporte(true);
+        
+        const fechaFormateada = formatearFechaParaBackendReporte(fecha);
+        
+        // Preparar los datos del reporte con conversiones mínimas
+        const datosReporte = {
+          ...estadoProcesado,
+          id_reporte: reportesBackend[clave] || null,
+          horaReal: estadoProcesado.horaReal || estadoProcesado.hora_real || 
+                   (programaActivo?.horario) || "05:00",
+          hora_tt: estadoProcesado.hora_tt || null,
+          target: estadoProcesado.target || null
         };
         
-        // Guardar ID del reporte para referencia
-        if (reporte.id_reporte) {
-          reportesBackendMap[clave] = reporte.id_reporte;
+        console.log('📤 ENVIAR - Datos al backend:', {
+          estado: datosReporte.estado,
+          target: datosReporte.target,
+          motivo: datosReporte.motivo ? datosReporte.motivo.substring(0, 50) + '...' : null
+        });
+        
+        const resultado = await guardarOActualizarReporte(
+          filialId, 
+          programaId, 
+          fechaFormateada, 
+          datosReporte
+        );
+        
+        console.log('✅ GUARDADO - Reporte actualizado exitosamente');
+        
+        // Actualizar el ID del reporte en el backend map
+        if (resultado.id || resultado.id_reporte) {
+          const reporteId = resultado.id || resultado.id_reporte;
+          setReportesBackend(prev => ({
+            ...prev,
+            [clave]: reporteId
+          }));
         }
         
-        console.log(`DEPURACIÓN - Reporte procesado para clave ${clave}:`, reportesMap[clave]);
-      } catch (error) {
-        console.error('Error al procesar reporte:', error, reporte);
+        // NO recargar todos los reportes, solo el que se actualizó es suficiente
       }
-    });
-    
-    // Actualizar estados
-    setReportes(prevReportes => ({ ...prevReportes, ...reportesMap }));
-    setReportesBackend(prevBackend => ({ ...prevBackend, ...reportesBackendMap }));
-    
-    console.log(`DEPURACIÓN - Carga completada: ${Object.keys(reportesMap).length} reportes procesados`);
-    
-  } catch (error) {
-    console.error('Error al cargar reportes desde backend:', error);
-  } finally {
-    setCargandoReportes(false);
-  }
-};
-
-
-
-// Función mejorada para obtenerEstadoReporte
-// Reemplaza esta función en el archivo GestorDatos.js
-
-const obtenerEstadoReporte = (filialId, programaId, fecha) => {
-  // Verificar parámetros
-  if (!filialId || !programaId || !fecha) {
-    console.warn('ADVERTENCIA: Parámetros incompletos en obtenerEstadoReporte', {
-      filialId, programaId, fecha
-    });
-    return { estado: 'pendiente', motivo: '', horaReal: '' };
-  }
-
-  // Generar clave para buscar en el objeto de reportes
-  const clave = generarClave(filialId, programaId, fecha);
-  
-  // Buscar el reporte en la estructura local
-  const reporteLocal = reportes[clave];
-  
-  // Buscar el ID del reporte en el backend (si existe)
-  const reporteBackendId = reportesBackend[clave];
-  
-  // Debug para verificar qué reportes tenemos
-  console.log(`DEPURACIÓN - obtenerEstadoReporte para clave: ${clave}`);
-  console.log('- Reporte local:', reporteLocal);
-  console.log('- ID Reporte backend:', reporteBackendId);
-  
-  // Si encontramos un reporte local, lo devolvemos
-  if (reporteLocal) {
-    // Asegurarse que todas las propiedades existan
-    const reporteCompleto = {
-      estado: reporteLocal.estado || 'pendiente',
-      motivo: reporteLocal.motivo || '',
-      horaReal: reporteLocal.horaReal || '',
-      hora_tt: reporteLocal.hora_tt || '',
-      target: reporteLocal.target || '', // Asegurar que target siempre exista
-      observaciones: reporteLocal.observaciones || '',
-      id_reporte: reporteBackendId
-    };
-    
-    // Si el target no está definido pero tenemos un motivo, intentar inferir el target
-    if (!reporteCompleto.target && reporteCompleto.motivo) {
-      try {
-        // Intentar encontrar un target basado en el motivo
-        for (const [abbr, label] of Object.entries(getTargetLabelMap())) {
-          if (reporteCompleto.motivo.includes(label) || 
-              reporteCompleto.motivo.includes(abbr)) {
-            reporteCompleto.target = abbr;
-            console.log(`DEPURACIÓN - Target inferido del motivo: ${abbr}`);
-            break;
-          }
-        }
-      } catch (e) {
-        console.error('Error al inferir target del motivo:', e);
-      }
+      
+    } catch (error) {
+      console.error('❌ Error al actualizar reporte:', error.message);
+      
+      // Revertir cambio en caso de error
+      setReportes(prev => {
+        const newReportes = { ...prev };
+        delete newReportes[clave];
+        return newReportes;
+      });
+      
+      throw error;
+      
+    } finally {
+      setGuardandoReporte(false);
     }
-    
-    console.log('DEPURACIÓN - Devolviendo reporte completo:', reporteCompleto);
-    return reporteCompleto;
-  }
+  }, [estadoConexion?.connected, reportesBackend, programaActivo?.horario]);
+
+  // ==================== FUNCIONES DE NOTAS OPTIMIZADAS ====================
   
-  // Si no hay reporte local, crear uno predeterminado
-  return { 
-    estado: 'pendiente', 
-    motivo: '', 
-    horaReal: '',
-    hora_tt: '',
-    target: '',
-    observaciones: '',
-    id_reporte: reporteBackendId
-  };
-};
-
-// Función auxiliar para mapeo de targets a etiquetas
-function getTargetLabelMap() {
-  return {
-    "Enf": "Enfermedad",
-    "P. Tec": "Problema técnico",
-    "F. Serv": "Falla de servicios",
-    "Tde": "Tarde",
-    "Fta": "Falta",
-    "Otros": "Otros"
-  };
-}
-
-const actualizarReporte = async (filialId, programaId, fecha, nuevoEstado) => {
-  const clave = generarClave(filialId, programaId, fecha);
-  
-  try {
-    // Actualizar estado local inmediatamente
-    setReportes(prev => ({
-      ...prev,
-      [clave]: nuevoEstado
-    }));
-
-    // Si hay conexión, guardar en el backend
-    if (estadoConexion?.connected) {
-      setGuardandoReporte(true);
-      
-      const fechaFormateada = formatearFechaParaBackendReporte(fecha);
-      
-      // Preparar los datos del reporte incluyendo los nuevos campos
-      const datosReporte = {
-        ...nuevoEstado,
-        id_reporte: reportesBackend[clave] || null,
-        horaReal: nuevoEstado.horaReal || nuevoEstado.hora_real || 
-                 (programaActivo?.horario) || "05:00",
-        // Incluir los nuevos campos
-        hora_tt: nuevoEstado.hora_tt || null,
-        target: nuevoEstado.target || null
-      };
-      
-      // Si el estado es 'tarde' y no hay motivo específico, usar target como motivo
-      if (nuevoEstado.estado === 'tarde' && !nuevoEstado.motivo && nuevoEstado.target && nuevoEstado.target !== 'Otros') {
-        datosReporte.motivo = nuevoEstado.target;
-      }
-      
-      // Si el estado es 'no' y no hay motivo específico, usar target como motivo
-      if (nuevoEstado.estado === 'no' && !nuevoEstado.motivo && nuevoEstado.target && nuevoEstado.target !== 'Otros') {
-        datosReporte.motivo = nuevoEstado.target;
-      }
-      
-      const resultado = await guardarOActualizarReporte(
-        filialId, 
-        programaId, 
-        fechaFormateada, 
-        datosReporte
-      );
-      
-      // Actualizar el ID del reporte en el backend map
-      if (resultado.id || resultado.id_reporte) {
-        const reporteId = resultado.id || resultado.id_reporte;
-        setReportesBackend(prev => ({
-          ...prev,
-          [clave]: reporteId
-        }));
-      }
-      
-      // Recargar reportes desde el backend para sincronizar
-      await cargarReportesDesdeBackend();
-    }
-    
-  } catch (error) {
-    console.error('Error al actualizar reporte:', error.message);
-    
-    // Revertir cambio en caso de error
-    setReportes(prev => {
-      const newReportes = { ...prev };
-      delete newReportes[clave];
-      return newReportes;
-    });
-    
-    // Mostrar error detallado al usuario
-    let mensajeError = 'Error al guardar el reporte.';
-    
-    if (error.response?.data?.message) {
-      mensajeError += `\n\nDetalle: ${error.response.data.message}`;
-      
-      if (error.response.data.message.includes('hora_real') || 
-          error.response.data.message.includes('hora_tt')) {
-        mensajeError += '\n\n💡 Sugerencia: Asegúrate de que el reporte tenga una hora válida.';
-      }
-    } else if (error.response?.data?.trace) {
-      if (error.response.data.trace.includes('ArrayList<com.kalek.incidencia.dto.ReporteDTO>')) {
-        mensajeError += '\n\nError de formato: El backend esperaba un array de reportes.';
-      } else {
-        mensajeError += `\n\nError técnico: ${error.response.data.error}`;
-      }
-    }
-    
-    mensajeError += '\n\nPor favor, verifica la conexión e inténtalo de nuevo.';
-    
-    throw new Error(mensajeError);
-    
-  } finally {
-    setGuardandoReporte(false);
-  }
-};
-
-  // ==================== FUNCIONES DE NOTAS ====================
-  
-  const obtenerNotaGeneral = (filialId) => {
+  const obtenerNotaGeneral = useCallback((filialId) => {
     const clave = generarClaveNota(filialId, fechaSeleccionada);
     return notasGenerales[clave] || '';
-  };
+  }, [notasGenerales, fechaSeleccionada]);
 
-  const guardarNotaGeneralBD = async (filialId, fechaInicioSemana, contenido) => {
+  const guardarNotaGeneralBD = useCallback(async (filialId, fechaInicioSemana, contenido) => {
     try {
       const clave = `${filialId}-${fechaInicioSemana}`;
       setNotasGenerales(prev => ({
@@ -470,82 +405,85 @@ const actualizarReporte = async (filialId, programaId, fecha, nuevoEstado) => {
     } catch (error) {
       throw error;
     }
-  };
+  }, []);
 
-  // ==================== FUNCIONES DE SINCRONIZACIÓN ====================
+  // ==================== FUNCIONES DE SINCRONIZACIÓN OPTIMIZADAS ====================
   
-  const sincronizarReportesPendientes = async () => {
-    if (!estadoConexion?.connected) return;
-    
-    try {
-      for (const [clave, reporte] of Object.entries(reportes)) {
-        if (!reportesBackend[clave]) {
-          const partes = clave.split('-');
-          const filialId = parseInt(partes[0]);
-          const programaId = parseInt(partes[1]);
-          const fecha = partes.slice(2).join('-');
-          
-          try {
-            const resultado = await guardarOActualizarReporte(
-              filialId,
-              programaId,
-              fecha,
-              reporte
-            );
-            
-            if (resultado.id_reporte) {
-              setReportesBackend(prev => ({
-                ...prev,
-                [clave]: resultado.id_reporte
-              }));
-            }
-          } catch (error) {
-            // Silencioso para reportes individuales
-          }
-        }
-      }
-    } catch (error) {
-      // Silencioso
-    }
-  };
-
-  const sincronizarManualmente = async () => {
+  const sincronizarManualmente = useCallback(async () => {
     if (!estadoConexion?.connected) {
       throw new Error('No hay conexión con el backend. Verifica tu conexión e intenta nuevamente.');
     }
 
     try {
       setSincronizando(true);
+      console.log('🔄 SYNC - Iniciando sincronización manual');
       
       await cargarDatosDelBackend();
       await cargarReportesDesdeBackend();
-      await sincronizarReportesPendientes();
       
       if (onSincronizar) {
         await onSincronizar();
       }
       
+      console.log('✅ SYNC - Sincronización completada');
       return true;
     } catch (error) {
+      console.error('❌ SYNC - Error en sincronización:', error);
       throw error;
     } finally {
       setSincronizando(false);
     }
-  };
+  }, [estadoConexion?.connected, cargarDatosDelBackend, cargarReportesDesdeBackend, onSincronizar]);
 
-  const refrescarReportes = async () => {
-    if (!estadoConexion?.connected) {
-      throw new Error('Sin conexión al backend. No se pueden refrescar los reportes.');
+  // ==================== EFECTOS OPTIMIZADOS ====================
+  
+  useEffect(() => {
+    inicializarDatos();
+    
+    // Actualizar fecha actual cada minuto
+    const intervalId = setInterval(() => {
+      obtenerFechaLocal();
+    }, 60000);
+
+    return () => clearInterval(intervalId);
+  }, []); // Sin dependencias para evitar re-inicializaciones
+
+  // Actualizar datos cuando cambian los props del backend
+  useEffect(() => {
+    if (programasBackend.length > 0 || filialesBackend.length > 0) {
+      actualizarDatosDesdeBackend();
+    }
+  }, [programasBackend.length, filialesBackend.length, actualizarDatosDesdeBackend]);
+
+  // Asegurar programa activo cuando hay datos disponibles
+  useEffect(() => {
+    if (!programaActivo && (programas.length > 0 || programasBackend.length > 0)) {
+      const programasAUsar = programas.length > 0 ? programas : programasBackend;
+      if (programasAUsar.length > 0) {
+        setProgramaActivo(programasAUsar[0]);
+      }
+    }
+  }, [programas.length, programasBackend.length, programaActivo]);
+
+  // Cargar reportes - CON DEBOUNCING para evitar llamadas excesivas
+  useEffect(() => {
+    let timeoutId;
+    
+    if (programaActivo && estadoConexion?.connected) {
+      // Debouncing de 300ms para evitar llamadas excesivas
+      timeoutId = setTimeout(() => {
+        cargarReportesDesdeBackend();
+      }, 300);
     }
     
-    try {
-      await cargarReportesDesdeBackend();
-    } catch (error) {
-      throw error;
-    }
-  };
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [programaActivo?.id, fechaSeleccionada.getTime(), estadoConexion?.connected]);
 
-  // ==================== RETORNO DEL HOOK ====================
+  // ==================== RETORNO DEL HOOK OPTIMIZADO ====================
   
   return {
     // Estados principales
@@ -569,22 +507,26 @@ const actualizarReporte = async (filialId, programaId, fecha, nuevoEstado) => {
     setGuardandoNota,
     ultimaActualizacion,
     
-    // Funciones de reportes
+    // Funciones de reportes MEMOIZADAS
     obtenerEstadoReporte,
     actualizarReporte,
     cargarReportesDesdeBackend,
-    refrescarReportes,
     
-    // Funciones de notas
+    // Funciones de notas MEMOIZADAS
     obtenerNotaGeneral,
     guardarNotaGeneralBD,
     
-    // Funciones de sincronización
+    // Funciones de sincronización MEMOIZADAS
     sincronizarManualmente,
-    sincronizarReportesPendientes,
     
     // Utilidades
     API_CONFIG,
-    TIMEZONE_PERU
+    TIMEZONE_PERU,
+    
+    // Funciones del sistema de mapeo exportadas
+    getTargetLabel,
+    processReportTarget,
+    convertAbbrToBackendTarget,
+    convertBackendTargetToAbbr
   };
 };

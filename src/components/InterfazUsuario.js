@@ -1,5 +1,4 @@
 // src/components/InterfazUsuario.js
-import { targetOptions, convertBackendTargetToAbbr, convertAbbrToBackendTarget } from '../utils/targetMapping';
 import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, CheckCircle, XCircle, AlertCircle, Search, 
@@ -17,6 +16,14 @@ import {
   diasSemana,
   meses
 } from './UtilidadesFecha';
+import { 
+  targetOptions, 
+  convertBackendTargetToAbbr, 
+  convertAbbrToBackendTarget,
+  getTargetLabel,
+  getTargetForEstado,
+  processReportTarget
+} from '../utils/targetMapping';
 
 /**
  * Componentes de interfaz de usuario para el sistema de transmisiones
@@ -359,17 +366,16 @@ export const PestanasProgramas = ({ programas, programaActivo, setProgramaActivo
   </div>
 );
 
-// ==================== COMPONENTE TOOLTIP - ACTUALIZADO ====================
+// ==================== COMPONENTE TOOLTIP ====================
 
 export const TooltipReporte = ({ tooltip }) => {
   if (!tooltip.visible) return null;
 
-  // Formatear contenido para mostrar los campos correctamente
+  // Formatear contenido del tooltip usando el sistema de mapeo
   const formatearContenidoTooltip = () => {
     const reporte = tooltip.reporte || {};
     
     if (reporte.estado === 'si') {
-      // Verificar todos los posibles nombres de campo para la hora real
       const horaReal = reporte.horaReal || reporte.hora_real || reporte.hora || '';
       return `✅ Transmitió\nHora: ${horaReal || 'No registrada'}`;
     }
@@ -378,7 +384,8 @@ export const TooltipReporte = ({ tooltip }) => {
       let contenido = `❌ No transmitió`;
       
       if (reporte.target) {
-        contenido += `\nMotivo: ${reporte.target}`;
+        const targetLabel = getTargetLabel(reporte.target, false);
+        contenido += `\nMotivo: ${targetLabel}`;
       }
       
       if (reporte.motivo && (!reporte.target || reporte.target === 'Otros')) {
@@ -391,7 +398,6 @@ export const TooltipReporte = ({ tooltip }) => {
     if (reporte.estado === 'tarde') {
       let contenido = `⏰ Transmitió tarde`;
       
-      // Verificar todos los posibles nombres de campo para la hora real
       const horaReal = reporte.horaReal || reporte.hora_real || reporte.hora || '';
       if (horaReal) {
         contenido += `\nHora real: ${horaReal}`;
@@ -402,7 +408,8 @@ export const TooltipReporte = ({ tooltip }) => {
       }
       
       if (reporte.target) {
-        contenido += `\nMotivo: ${reporte.target}`;
+        const targetLabel = getTargetLabel(reporte.target, false);
+        contenido += `\nMotivo: ${targetLabel}`;
       }
       
       if (reporte.motivo && (!reporte.target || reporte.target === 'Otros')) {
@@ -415,6 +422,8 @@ export const TooltipReporte = ({ tooltip }) => {
     return `⏳ Pendiente`;
   };
 
+  const content = tooltip.content || formatearContenidoTooltip();
+
   return (
     <div
       className="fixed z-50 bg-black text-white px-3 py-2 rounded-lg text-sm pointer-events-none transform -translate-x-1/2 -translate-y-full max-w-xs break-words"
@@ -423,13 +432,13 @@ export const TooltipReporte = ({ tooltip }) => {
         top: tooltip.y,
       }}
     >
-      <div className="whitespace-pre-wrap">{formatearContenidoTooltip()}</div>
+      <div className="whitespace-pre-wrap">{content}</div>
       <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-black"></div>
     </div>
   );
 };
 
-// src/components/InterfazUsuario.js - SECCIÓN MODAL REPORTE CORREGIDA
+// ==================== COMPONENTE MODAL DE REPORTE ====================
 
 export const ModalReporte = ({ 
   mostrarModal, 
@@ -443,122 +452,68 @@ export const ModalReporte = ({
   formatearFecha,
   TIMEZONE_PERU 
 }) => {
-  // Validación temprana pero no return para evitar conflicto con useEffect
-  const modalVisible = mostrarModal && reporteSeleccionado;
-  
-  // useEffect para establecer valores predeterminados
+  // Usar useEffect para procesar el reporte cuando cambia
   useEffect(() => {
-    if (reporteSeleccionado) {
-      let actualizacionNecesaria = false;
-      let reporteActualizado = { ...reporteSeleccionado };
-      
-      // Para estado 'tarde', asegurar que tiene horas
-      if (reporteSeleccionado.estado === 'tarde') {
-        // Si no hay hora real, usar la del programa
-        if (!reporteSeleccionado.horaReal) {
-          const programaActual = programas.find(p => p.id === reporteSeleccionado?.programaId);
-          const horaPredeterminada = programaActual?.horario || "05:00";
-          reporteActualizado.horaReal = horaPredeterminada;
-          actualizacionNecesaria = true;
-        }
-        
-        // Si no hay hora_tt, usar una 10 minutos después de la real
-        if (!reporteSeleccionado.hora_tt) {
-          const horaBase = reporteActualizado.horaReal || "05:00";
-          const [horas, minutos] = horaBase.split(':').map(Number);
-          let minutosRetrasados = minutos + 10; // Añadir 10 minutos por defecto
-          let horasRetrasadas = horas;
-          
-          if (minutosRetrasados >= 60) {
-            horasRetrasadas += 1;
-            minutosRetrasados -= 60;
-          }
-          
-          if (horasRetrasadas >= 24) {
-            horasRetrasadas -= 24;
-          }
-          
-          const horaTardiaDefault = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
-          reporteActualizado.hora_tt = horaTardiaDefault;
-          actualizacionNecesaria = true;
-        }
-      }
-      
-      // Actualizar el estado solo si es necesario
-      if (actualizacionNecesaria) {
-        setReporteSeleccionado(reporteActualizado);
+    if (reporteSeleccionado && reporteSeleccionado.estado) {
+      // Procesar el target del reporte usando el sistema de mapeo
+      const reporteProcesado = processReportTarget(reporteSeleccionado);
+      if (reporteProcesado.target !== reporteSeleccionado.target) {
+        setReporteSeleccionado(reporteProcesado);
       }
     }
-  }, [reporteSeleccionado, programas, setReporteSeleccionado]);
+  }, [reporteSeleccionado?.estado]);
 
-  // No mostrar nada si el modal no está visible
-  if (!modalVisible) return null;
-
-  // Obtener nombres de filial y programa
-  const filialNombre = filiales.find(f => f.id === reporteSeleccionado.filialId)?.nombre || '';
-  const programaNombre = programas.find(p => p.id === reporteSeleccionado.programaId)?.nombre || '';
-
-  // Handler para cambio de hora real con validación
-  const handleHoraRealChange = (e) => {
-    const newHora = e.target.value;
-    
-    setReporteSeleccionado({
-      ...reporteSeleccionado,
-      horaReal: newHora
-    });
-  };
-
-  // Handler para cambio de estado
+  // Manejar cambios en el estado de transmisión
   const handleEstadoChange = (e) => {
     const nuevoEstado = e.target.value;
     const currentPrograma = programas.find(p => p.id === reporteSeleccionado.programaId);
     const horaPrograma = currentPrograma?.horario || "05:00";
     
-    // Cuando cambia a estado "si", establecer hora predeterminada del programa
+    // Obtener el target apropiado para el nuevo estado
+    const targetApropiado = getTargetForEstado(nuevoEstado, reporteSeleccionado.target);
+    
+    const updateData = {
+      ...reporteSeleccionado,
+      estado: nuevoEstado,
+      target: targetApropiado
+    };
+    
+    // Configurar valores por defecto según el estado
     if (nuevoEstado === 'si') {
-      setReporteSeleccionado({
-        ...reporteSeleccionado,
-        estado: nuevoEstado,
-        horaReal: horaPrograma,
-        hora_tt: null,
-        target: null,
-        motivo: null
-      });
+      updateData.horaReal = reporteSeleccionado.horaReal || horaPrograma;
+      updateData.hora_tt = null;
+      updateData.motivo = null;
+    } else if (nuevoEstado === 'tarde') {
+      updateData.horaReal = reporteSeleccionado.horaReal || horaPrograma;
+      updateData.hora_tt = reporteSeleccionado.hora_tt || horaPrograma;
+    } else if (nuevoEstado === 'no') {
+      updateData.horaReal = null;
+      updateData.hora_tt = null;
     }
-    // Cuando cambia a estado "tarde", mantener la hora real si existe
-    else if (nuevoEstado === 'tarde') {
-      setReporteSeleccionado({
-        ...reporteSeleccionado,
-        estado: nuevoEstado,
-        horaReal: reporteSeleccionado.horaReal || horaPrograma,
-        hora_tt: reporteSeleccionado.hora_tt || horaPrograma,
-        target: reporteSeleccionado.target || "Tde", // Target predeterminado para Tarde
-        motivo: null // Reset del motivo al cambiar de estado
-      });
-    }
-    // Cuando cambia a estado "no", establecer target predeterminado
-    else if (nuevoEstado === 'no') {
-      setReporteSeleccionado({
-        ...reporteSeleccionado,
-        estado: nuevoEstado,
-        horaReal: null,
-        hora_tt: null,
-        target: reporteSeleccionado.target || "Fta", // Abreviatura para Falta
-        motivo: null
-      });
-    }
-    else {
-      // Estado pendiente
-      setReporteSeleccionado({
-        ...reporteSeleccionado,
-        estado: nuevoEstado
-      });
-    }
+    
+    setReporteSeleccionado(updateData);
   };
 
+  // Manejar cambios en el campo target
+  const handleTargetChange = (e) => {
+    const newTarget = e.target.value;
+    setReporteSeleccionado({
+      ...reporteSeleccionado,
+      target: newTarget,
+      // Si se selecciona "Otros", limpiar el motivo para que el usuario lo especifique
+      motivo: newTarget === 'Otros' ? '' : reporteSeleccionado.motivo
+    });
+  };
+
+  if (!mostrarModal || !reporteSeleccionado) return null;
+
+  // Obtener información de la filial y programa seleccionados
+  const filialActual = filiales.find(f => f.id === reporteSeleccionado.filialId);
+  const programaActual = programas.find(p => p.id === reporteSeleccionado.programaId);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 modal-backdrop">
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full modal-content">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-gray-900">
@@ -570,19 +525,18 @@ export const ModalReporte = ({
             </div>
           </div>
           
-          {/* Información del reporte */}
           <div className="mb-4">
             <p className="text-sm text-gray-600 mb-2">
-              <strong>Ciudad:</strong> {filialNombre}
+              <strong>Ciudad:</strong> {filialActual?.nombre || reporteSeleccionado.filialId}
             </p>
             <p className="text-sm text-gray-600 mb-2">
-              <strong>Programa:</strong> {programaNombre}
+              <strong>Programa:</strong> {programaActual?.nombre || reporteSeleccionado.programaId}
             </p>
             <p className="text-sm text-gray-600 mb-2">
               <strong>Día:</strong> {reporteSeleccionado.diaNombre}
             </p>
             <p className="text-sm text-gray-600 mb-4">
-              <strong>Fecha:</strong> {formatearFecha(reporteSeleccionado.fecha)}
+              <strong>Fecha:</strong> {formatearFecha ? formatearFecha(reporteSeleccionado.fecha) : reporteSeleccionado.fecha}
             </p>
           </div>
 
@@ -598,11 +552,11 @@ export const ModalReporte = ({
               <option value="pendiente">Pendiente</option>
               <option value="si">Sí transmitió</option>
               <option value="no">No transmitió</option>
-              <option value="tarde">Transmitio Tarde</option>
+              <option value="tarde">Transmitió Tarde</option>
             </select>
           </div>
 
-          {/* Input de hora real para Sí transmitió */}
+          {/* Campos específicos para "Sí transmitió" */}
           {reporteSeleccionado.estado === 'si' && (
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -610,14 +564,58 @@ export const ModalReporte = ({
               </label>
               <input
                 type="time"
-                value={reporteSeleccionado.horaReal || ""}
-                onChange={handleHoraRealChange}
+                value={reporteSeleccionado.horaReal || ''}
+                onChange={(e) => setReporteSeleccionado({
+                  ...reporteSeleccionado,
+                  horaReal: e.target.value
+                })}
                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           )}
 
-          {/* Campos específicos para Transmisión Tardía */}
+          {/* Campos específicos para "No transmitió" */}
+          {reporteSeleccionado.estado === 'no' && (
+            <>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Motivo
+                </label>
+                <select
+                  value={reporteSeleccionado.target || ''}
+                  onChange={handleTargetChange}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="" disabled>Seleccione un motivo</option>
+                  {targetOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {reporteSeleccionado.target === 'Otros' && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Especificar motivo
+                  </label>
+                  <textarea
+                    value={reporteSeleccionado.motivo || ''}
+                    onChange={(e) => setReporteSeleccionado({
+                      ...reporteSeleccionado,
+                      motivo: e.target.value
+                    })}
+                    placeholder="Explica el motivo..."
+                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows="3"
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Campos específicos para "Transmitió Tarde" */}
           {reporteSeleccionado.estado === 'tarde' && (
             <>
               <div className="mb-4">
@@ -626,8 +624,11 @@ export const ModalReporte = ({
                 </label>
                 <input
                   type="time"
-                  value={reporteSeleccionado.horaReal || ""}
-                  onChange={handleHoraRealChange}
+                  value={reporteSeleccionado.horaReal || ''}
+                  onChange={(e) => setReporteSeleccionado({
+                    ...reporteSeleccionado,
+                    horaReal: e.target.value
+                  })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
@@ -649,21 +650,18 @@ export const ModalReporte = ({
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Motivo
+                  Motivo del retraso
                 </label>
                 <select
                   value={reporteSeleccionado.target || ''}
-                  onChange={(e) => setReporteSeleccionado({
-                    ...reporteSeleccionado,
-                    target: e.target.value,
-                    // Limpiar el motivo personalizado si no es "Otros"
-                    motivo: e.target.value !== 'Otros' ? e.target.value : reporteSeleccionado.motivo
-                  })}
+                  onChange={handleTargetChange}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="" disabled>Seleccione un motivo</option>
                   {targetOptions.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -671,7 +669,7 @@ export const ModalReporte = ({
               {reporteSeleccionado.target === 'Otros' && (
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Especificar motivo
+                    Especificar motivo del retraso
                   </label>
                   <textarea
                     value={reporteSeleccionado.motivo || ''}
@@ -680,48 +678,6 @@ export const ModalReporte = ({
                       motivo: e.target.value
                     })}
                     placeholder="Explica el motivo del retraso..."
-                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows="3"
-                  />
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Campos específicos para No Transmitió */}
-          {reporteSeleccionado.estado === 'no' && (
-            <>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Motivo
-                </label>
-                <select
-                  value={reporteSeleccionado.target || ''}
-                  onChange={(e) => setReporteSeleccionado({
-                    ...reporteSeleccionado,
-                    target: e.target.value
-                  })}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="" disabled>Seleccione un motivo</option>
-                  {targetOptions.map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {reporteSeleccionado.target === 'Otros' && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Especificar motivo
-                  </label>
-                  <textarea
-                    value={reporteSeleccionado.motivo || ''}
-                    onChange={(e) => setReporteSeleccionado({
-                      ...reporteSeleccionado,
-                      motivo: e.target.value
-                    })}
-                    placeholder="Explica el motivo..."
                     className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     rows="3"
                   />
@@ -756,8 +712,7 @@ export const ModalReporte = ({
       </div>
     </div>
   );
-}
-
+};
 
 // ==================== COMPONENTE MODAL DE NOTAS ====================
 
@@ -950,7 +905,7 @@ export const PanelInformacion = ({
   </div>
 );
 
-// ==================== HOOK PARA MANEJO DE MODALES - ACTUALIZADO ====================
+// ==================== HOOK PARA MANEJO DE MODALES ====================
 
 export const useModalManager = () => {
   const [mostrarModal, setMostrarModal] = useState(false);
@@ -961,7 +916,7 @@ export const useModalManager = () => {
   const [modoVista, setModoVista] = useState('semana');
   const [filtroFilial, setFiltroFilial] = useState('');
 
-  // Estados para tooltip - ACTUALIZADO
+  // Estados para tooltip
   const [tooltip, setTooltip] = useState({
     visible: false,
     reporte: null,
@@ -970,44 +925,16 @@ export const useModalManager = () => {
     y: 0
   });
 
-  // ACTUALIZADO: mostrarTooltip con depuración
   const mostrarTooltip = (event, reporte) => {
-    // Asegurarse que tenemos el reporte completo
-    if (!reporte) return;
-    
     const rect = event.currentTarget.getBoundingClientRect();
     
-    // Debugging - Mostrar información completa del reporte en la consola
-    console.log('DEPURACIÓN - TOOLTIP - Reporte recibido:', reporte);
-    console.log('DEPURACIÓN - TOOLTIP - Estado:', reporte.estado);
-    console.log('DEPURACIÓN - TOOLTIP - Hora Real:', reporte.horaReal);
-    console.log('DEPURACIÓN - TOOLTIP - Hora TT:', reporte.hora_tt);
-    console.log('DEPURACIÓN - TOOLTIP - Target:', reporte.target);
-    console.log('DEPURACIÓN - TOOLTIP - Motivo:', reporte.motivo);
+    // Procesar el reporte para asegurar que tenga el target correcto
+    const reporteProcesado = processReportTarget(reporte);
     
-    // Preparar la información para el tooltip, asegurándose de incluir
-    // explícitamente la hora para que no se pierda
-    const reporteCompleto = {
-      ...reporte,
-      // Asegurar que horaReal esté disponible, priorizando los diferentes nombres que podría tener
-      horaReal: reporte.horaReal || reporte.hora_real || reporte.hora || '',
-      // Incluir campos adicionales
-      hora_tt: reporte.hora_tt || '',
-      target: reporte.target || '',
-      motivo: reporte.motivo || ''
-    };
-    
-    // Incluir la hora en el contenido del tooltip para debugging
-    let contenidoExtra = '';
-    if (reporteCompleto.estado === 'si') {
-      contenidoExtra = `Hora registrada: ${reporteCompleto.horaReal || 'No disponible'}`;
-    }
-    
-    // Preparar la información para el tooltip
     setTooltip({
       visible: true,
-      reporte: reporteCompleto,
-      content: contenidoExtra, // Para debugging
+      reporte: reporteProcesado,
+      content: '', // El contenido se generará en el componente TooltipReporte
       x: rect.left + rect.width / 2,
       y: rect.top - 10
     });
@@ -1018,9 +945,16 @@ export const useModalManager = () => {
   };
 
   const abrirModal = (filialId, programaId, fecha, diaNombre, reporte) => {
-    setReporteSeleccionado({
-      filialId, programaId, fecha, diaNombre, ...reporte
+    // Procesar el reporte para asegurar que tenga el target correcto
+    const reporteProcesado = processReportTarget({
+      filialId, 
+      programaId, 
+      fecha, 
+      diaNombre, 
+      ...reporte
     });
+    
+    setReporteSeleccionado(reporteProcesado);
     setMostrarModal(true);
   };
 

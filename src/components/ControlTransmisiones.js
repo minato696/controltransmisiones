@@ -1,10 +1,18 @@
-﻿// src/components/TransmissionTracker.js (Refactorizado)
-import React from 'react';
-import { convertAbbrToBackendTarget } from '../utils/targetMapping';
+﻿// src/components/ControlTransmisiones.js - CORREGIDO (Sin violaciones de Hooks) - COMPLETO Y ACTUALIZADO
+import React, { useMemo, useCallback } from 'react';
+
+// ==================== IMPORTACIONES DEL SISTEMA DE MAPEO ====================
+import { 
+  convertAbbrToBackendTarget,
+  getTargetLabel,
+  getTargetForEstado,
+  processReportTarget,
+  isValidTargetAbbr
+} from '../utils/targetMapping';
 
 import { 
   Clock, CheckCircle, XCircle, AlertCircle, 
-  FileText, Wifi, WifiOff
+  FileText
 } from 'lucide-react';
 import ExportManager from './ExportManager';
 
@@ -33,12 +41,17 @@ import {
   diasSemana
 } from './UtilidadesFecha';
 
+// Función auxiliar optimizada para manejar conversiones de "Otro"
+const convertTargetSafe = (target) => {
+  if (target === 'Otro' || target === 'Otros') {
+    return 'Otro';
+  }
+  return convertAbbrToBackendTarget(target);
+};
+
 /**
- * Componente principal refactorizado del sistema de transmisiones
- * Responsabilidades:
- * - Coordinación entre GestorDatos e InterfazUsuario
- * - Renderizado de la tabla principal de transmisiones
- * - Manejo de eventos de interacción principal
+ * Componente principal OPTIMIZADO del sistema de transmisiones
+ * CORREGIDO: Sin violaciones de las reglas de Hooks
  */
 
 const TransmissionTracker = ({ 
@@ -116,166 +129,178 @@ const TransmissionTracker = ({
     abrirModalNotas
   } = useModalManager();
 
-  // ==================== CÁLCULOS DERIVADOS ====================
+  // ==================== CÁLCULOS MEMOIZADOS ====================
   
-  const semanaActual = getSemanaFromDate(fechaSeleccionada);
-  const filialesFiltradas = filiales.filter(f => 
-    f.nombre.toLowerCase().includes(filtroFilial.toLowerCase())
+  const semanaActual = useMemo(() => getSemanaFromDate(fechaSeleccionada), [fechaSeleccionada]);
+  
+  const filialesFiltradas = useMemo(() => 
+    filiales.filter(f => 
+      f.nombre.toLowerCase().includes(filtroFilial.toLowerCase())
+    ), [filiales, filtroFilial]
   );
-  const stats = calcularEstadisticas(
-    filiales, 
-    semanaActual, 
-    fechaSeleccionada, 
-    programaActivo, 
-    modoVista, 
-    obtenerEstadoReporte
+  
+  const stats = useMemo(() => 
+    calcularEstadisticas(
+      filiales, 
+      semanaActual, 
+      fechaSeleccionada, 
+      programaActivo, 
+      modoVista, 
+      obtenerEstadoReporte
+    ), [filiales, semanaActual, fechaSeleccionada, programaActivo, modoVista, obtenerEstadoReporte]
   );
 
-  // ==================== FUNCIONES DE NAVEGACIÓN ====================
+  // ==================== FUNCIONES DE NAVEGACIÓN MEMOIZADAS ====================
   
-  const navegarSemana = (direccion) => {
+  const navegarSemana = useCallback((direccion) => {
     const nuevaFecha = new Date(fechaSeleccionada);
     nuevaFecha.setDate(fechaSeleccionada.getDate() + (direccion * 7));
     setFechaSeleccionada(nuevaFecha);
-  };
+  }, [fechaSeleccionada, setFechaSeleccionada]);
 
-  const irASemanaActual = () => {
+  const irASemanaActual = useCallback(() => {
     setFechaSeleccionada(obtenerFechaLocal());
-  };
+  }, [setFechaSeleccionada]);
 
-  // ==================== FUNCIONES DE INTERACCIÓN ====================
+  // ==================== FUNCIONES DE INTERACCIÓN OPTIMIZADAS ====================
   
-  const manejarClickReporte = (filialId, programaId, fecha, diaNombre) => {
+  const manejarClickReporte = useCallback((filialId, programaId, fecha, diaNombre) => {
     const reporte = obtenerEstadoReporte(filialId, programaId, fecha);
-    abrirModal(filialId, programaId, fecha, diaNombre, reporte);
-  };
+    // PROCESAMIENTO MÍNIMO - solo si es necesario
+    const reporteProcesado = reporte.target ? reporte : processReportTarget(reporte);
+    abrirModal(filialId, programaId, fecha, diaNombre, reporteProcesado);
+  }, [obtenerEstadoReporte, abrirModal]);
 
-  const manejarClickNotas = (filial) => {
+  const manejarClickNotas = useCallback((filial) => {
     const nota = obtenerNotaGeneral(filial.id);
     const semana = `${formatearFechaLocal(semanaActual.inicio)} - ${formatearFechaLocal(semanaActual.fin)}`;
     abrirModalNotas(filial, nota, semana);
-  };
+  }, [obtenerNotaGeneral, semanaActual, abrirModalNotas]);
 
-// src/components/ControlTransmisiones.js - FUNCIÓN guardarReporte CORREGIDA
+  // ==================== FUNCIÓN GUARDAR REPORTE OPTIMIZADA ====================
 
-// src/components/ControlTransmisiones.js - FUNCIÓN guardarReporte CORREGIDA
-
-const guardarReporte = async () => {
-  if (!reporteSeleccionado) return;
-  
-  try {
-    // Preparar datos según el estado de transmisión
-    const datosReporte = { ...reporteSeleccionado };
+  const guardarReporte = useCallback(async () => {
+    if (!reporteSeleccionado) return;
     
-    // Si es "Sí transmitió", enviar solo estado y hora real
-    if (datosReporte.estado === 'si') {
-      // Verificar que la hora real esté presente
-      if (!datosReporte.horaReal) {
-        // Si no hay hora real, usar la hora del programa
-        const programaActual = programas.find(p => p.id === reporteSeleccionado.programaId);
-        datosReporte.horaReal = programaActual?.horario || "05:00";
+    try {
+      console.log('🔄 GUARDAR - Iniciando con datos:', {
+        estado: reporteSeleccionado.estado,
+        target: reporteSeleccionado.target,
+        motivo: reporteSeleccionado.motivo ? 'Sí' : 'No'
+      });
+      
+      // Preparar datos según el estado de transmisión SIN PROCESAMIENTO EXCESIVO
+      const datosReporte = { ...reporteSeleccionado };
+      
+      // Validar y asignar target según el estado - MÍNIMO PROCESAMIENTO
+      if (datosReporte.estado === 'no' || datosReporte.estado === 'tarde') {
+        const targetApropiado = datosReporte.target || getTargetForEstado(datosReporte.estado, null);
+        datosReporte.target = targetApropiado;
       }
       
-      // Para "Sí transmitió" solo enviamos estado y hora real
-      datosReporte.hora_tt = null;
-      datosReporte.target = null;
-      datosReporte.motivo = null;
-    } 
-    // Si es "No transmitió", enviar estado y target como motivo
-    else if (datosReporte.estado === 'no') {
-      datosReporte.horaReal = null;
-      datosReporte.hora_tt = null;
-      
-      // Si el target es "Otros", mantener el motivo personalizado
-      // Si no, usar el target como motivo
-      if (datosReporte.target === 'Otros') {
-        // Ya tiene motivo personalizado, asegurar que no sea null
-        datosReporte.motivo = datosReporte.motivo || "";
-      } else {
+      // Configuraciones específicas por estado
+      if (datosReporte.estado === 'si') {
+        // Para "Sí transmitió"
+        if (!datosReporte.horaReal) {
+          const programaActual = programas.find(p => p.id === reporteSeleccionado.programaId);
+          datosReporte.horaReal = programaActual?.horario || "05:00";
+        }
+        datosReporte.hora_tt = null;
+        datosReporte.target = null;
         datosReporte.motivo = null;
-      }
-      
-      // Convertir abreviatura a valor del backend
-      datosReporte.target = convertAbbrToBackendTarget(datosReporte.target);
-    }
-    // Si es "Transmitio Tarde", enviar según formato del backend
-    else if (datosReporte.estado === 'tarde') {
-      // Asegurar que horaReal está presente
-      if (!datosReporte.horaReal) {
-        const programaActual = programas.find(p => p.id === reporteSeleccionado.programaId);
-        datosReporte.horaReal = programaActual?.horario || "05:00";
-      }
-      
-      // Asegurar que hora_tt está presente
-      if (!datosReporte.hora_tt) {
-        // Por defecto, 10 minutos después de la hora real
-        const [horas, minutos] = datosReporte.horaReal.split(':').map(Number);
-        let minutosRetrasados = minutos + 10;
-        let horasRetrasadas = horas;
         
-        if (minutosRetrasados >= 60) {
-          horasRetrasadas += 1;
-          minutosRetrasados -= 60;
+        console.log('✅ PREPARADO - Reporte "Sí transmitió"');
+      } 
+      else if (datosReporte.estado === 'no') {
+        // Para "No transmitió"
+        datosReporte.horaReal = null;
+        datosReporte.hora_tt = null;
+        
+        // IMPORTANTE: Verificar "Otros" ANTES de convertir - CORREGIDO
+        const esOtros = datosReporte.target === 'Otros' || datosReporte.target === 'Otro';
+        
+        if (esOtros) {
+          // Para "Otros", mantener motivo personalizado
+          datosReporte.motivo = datosReporte.motivo || "";
+          console.log('📝 OTROS - Motivo personalizado:', datosReporte.motivo.substring(0, 50));
+        } else {
+          // Para targets predefinidos, motivo es null
+          datosReporte.motivo = null;
         }
         
-        datosReporte.hora_tt = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
+        // Convertir target usando función segura
+        datosReporte.target = convertTargetSafe(datosReporte.target);
+        console.log('✅ PREPARADO - Reporte "No transmitió" con target:', datosReporte.target);
+      }
+      else if (datosReporte.estado === 'tarde') {
+        // Para "Transmitió Tarde"
+        if (!datosReporte.horaReal) {
+          const programaActual = programas.find(p => p.id === reporteSeleccionado.programaId);
+          datosReporte.horaReal = programaActual?.horario || "05:00";
+        }
+        
+        if (!datosReporte.hora_tt) {
+          const [horas, minutos] = datosReporte.horaReal.split(':').map(Number);
+          let minutosRetrasados = minutos + 10;
+          let horasRetrasadas = horas;
+          
+          if (minutosRetrasados >= 60) {
+            horasRetrasadas += 1;
+            minutosRetrasados -= 60;
+          }
+          
+          datosReporte.hora_tt = `${String(horasRetrasadas).padStart(2, '0')}:${String(minutosRetrasados).padStart(2, '0')}`;
+        }
+        
+        // Manejar motivo para transmisión tardía
+        if (datosReporte.target === 'Otros') {
+          // Para "Otros", usar motivo personalizado
+          datosReporte.motivo = datosReporte.motivo || "";
+        } else if (datosReporte.target) {
+          // Para targets predefinidos, usar etiqueta como motivo
+          const targetLabel = getTargetLabel(datosReporte.target, false);
+          datosReporte.motivo = targetLabel;
+        }
+        
+        // Para backend, target es null en transmisión tardía
+        datosReporte.target = null;
+        
+        console.log('✅ PREPARADO - Reporte "Transmitió Tarde"');
       }
       
-      // Manejar el motivo según el target seleccionado
-      if (datosReporte.target === 'Otros') {
-        // Si es "Otros", usar el motivo personalizado
-        datosReporte.motivo = datosReporte.motivo || "";
-      } else if (datosReporte.target) {
-        // Si es otro target predefinido, usar ese como motivo
-        datosReporte.motivo = datosReporte.target;
-      } else {
-        // Si no hay target, dejar motivo como está
-        datosReporte.motivo = datosReporte.motivo || null;
-      }
+      console.log('📤 ENVÍO - Datos al backend preparados');
       
-      // Para el backend, target debe ser null en "Transmitio Tarde"
-      datosReporte.target = null;
-    }
-    
-    // Enviar al backend
-    await actualizarReporte(
-      datosReporte.filialId, 
-      datosReporte.programaId,
-      datosReporte.fecha, 
-      datosReporte
-    );
-    
-    setMostrarModal(false);
-    setReporteSeleccionado(null);
-  } catch (error) {
-    console.error('Error al guardar reporte:', error);
-    
-    // Mensaje de error más descriptivo
-    let mensajeError = 'Error al guardar el reporte.';
-    
-    if (error.response) {
-      if (error.response.status === 500) {
-        mensajeError = 'Error interno del servidor. El formato de datos puede no ser compatible con el backend.';
-      } else if (error.response.status === 400) {
-        mensajeError = 'Datos incorrectos. Verifica los campos requeridos e intenta de nuevo.';
-      } else if (error.response.status === 404) {
+      // Enviar al backend
+      await actualizarReporte(
+        datosReporte.filialId, 
+        datosReporte.programaId,
+        datosReporte.fecha, 
+        datosReporte
+      );
+      
+      console.log('✅ ÉXITO - Reporte guardado');
+      
+      setMostrarModal(false);
+      setReporteSeleccionado(null);
+    } catch (error) {
+      console.error('❌ ERROR - Al guardar reporte:', error.message);
+      
+      // Mensaje de error más descriptivo sin detalles técnicos excesivos
+      let mensajeError = 'Error al guardar el reporte.';
+      
+      if (error.response?.status === 500) {
+        mensajeError = 'Error interno del servidor.';
+      } else if (error.response?.status === 400) {
+        mensajeError = 'Datos incorrectos. Verifica los campos e intenta de nuevo.';
+      } else if (error.response?.status === 404) {
         mensajeError = 'No se encontró el recurso en el servidor.';
       }
       
-      // Si hay mensaje detallado del servidor, mostrarlo
-      if (error.response.data && error.response.data.message) {
-        mensajeError += `\n\nDetalle: ${error.response.data.message}`;
-      }
-    } else if (error.message) {
-      mensajeError = error.message;
+      alert(mensajeError);
     }
-    
-    alert(mensajeError);
-  }
-};
+  }, [reporteSeleccionado, programas, actualizarReporte, setMostrarModal, setReporteSeleccionado]);
 
-
-  const guardarNotaGeneral = async () => {
+  const guardarNotaGeneral = useCallback(async () => {
     if (!notaSeleccionada) return;
     
     try {
@@ -288,23 +313,70 @@ const guardarReporte = async () => {
       );
       setMostrarModalNotas(false);
       setNotaSeleccionada(null);
-      console.log('✅ Nota guardada exitosamente con timezone:', TIMEZONE_PERU);
+      console.log('✅ NOTA - Guardada exitosamente');
     } catch (error) {
-      console.error('Error al guardar la nota:', error);
+      console.error('ERROR - Al guardar nota:', error);
       alert('Error al guardar la nota. Por favor, inténtalo de nuevo.');
     } finally {
       setGuardandoNota(false);
     }
-  };
+  }, [notaSeleccionada, semanaActual, guardarNotaGeneralBD, setMostrarModalNotas, setNotaSeleccionada, setGuardandoNota]);
 
-  const manejarSincronizacion = async () => {
+  const manejarSincronizacion = useCallback(async () => {
     try {
       await sincronizarManualmente();
-      alert('✅ Datos sincronizados correctamente con zona horaria de Perú');
+      alert('✅ Datos sincronizados correctamente');
     } catch (error) {
       alert('❌ ' + error.message);
     }
-  };
+  }, [sincronizarManualmente]);
+
+  // ==================== FUNCIÓN AUXILIAR PARA GENERAR TOOLTIP CORREGIDA ====================
+  
+  const generarTooltipContenido = useCallback((reporteProcesado) => {
+    // IMPORTANTE: Asegurar que el reporte esté completamente procesado
+    const reporteCompleto = processReportTarget(reporteProcesado);
+    
+    if (reporteCompleto.estado === 'si') {
+      return `✅ Transmitió\nHora: ${reporteCompleto.horaReal || 'No registrada'}`;
+    }
+    
+    if (reporteCompleto.estado === 'no') {
+      let contenido = `❌ No transmitió`;
+      if (reporteCompleto.target) {
+        const targetLabel = getTargetLabel(reporteCompleto.target, false);
+        contenido += `\nMotivo: ${targetLabel}`;
+        
+        // CORREGIDO: Mostrar detalle para "Otros" cuando hay motivo personalizado
+        if (reporteCompleto.target === 'Otros' && reporteCompleto.motivo) {
+          contenido += `\nDetalle: ${reporteCompleto.motivo}`;
+        }
+      }
+      return contenido;
+    }
+    
+    if (reporteCompleto.estado === 'tarde') {
+      let contenido = `⏰ Transmitió tarde`;
+      if (reporteCompleto.horaReal) {
+        contenido += `\nHora real: ${reporteCompleto.horaReal}`;
+      }
+      if (reporteCompleto.hora_tt) {
+        contenido += `\nHora TT: ${reporteCompleto.hora_tt}`;
+      }
+      if (reporteCompleto.target) {
+        const targetLabel = getTargetLabel(reporteCompleto.target, false);
+        contenido += `\nMotivo: ${targetLabel}`;
+        
+        // CORREGIDO: Mostrar detalle para "Otros" cuando hay motivo personalizado
+        if (reporteCompleto.target === 'Otros' && reporteCompleto.motivo) {
+          contenido += `\nDetalle: ${reporteCompleto.motivo}`;
+        }
+      }
+      return contenido;
+    }
+    
+    return `⏳ Pendiente`;
+  }, []);
 
   // ==================== RENDERIZADO CONDICIONAL ====================
   
@@ -345,6 +417,43 @@ const guardarReporte = async () => {
       </div>
     );
   }
+
+  // ==================== FUNCIÓN AUXILIAR PARA RENDERIZADO DE CELDA (CORREGIDA) ====================
+  
+  const renderizarCeldaReporte = (filial, fecha, diaNombre, index = null) => {
+    const reporte = obtenerEstadoReporte(filial.id, programaActivo?.id, fecha);
+    
+    // PROCESAMIENTO MÍNIMO - solo si no tiene target pero lo necesita
+    let reporteProcesado = reporte;
+    if ((reporte.estado === 'no' || reporte.estado === 'tarde') && !reporte.target && reporte.motivo) {
+      reporteProcesado = processReportTarget(reporte);
+    }
+    
+    const clave = `${filial.id}-${programaActivo?.id}-${fecha.toISOString().split('T')[0]}`;
+    const tieneSincronizacion = reportesBackend[clave];
+    
+    return (
+      <td key={index !== null ? index : fecha.toISOString()} className="px-4 py-4 text-center">
+        <div className="relative inline-block">
+          <button
+            onClick={() => manejarClickReporte(filial.id, programaActivo?.id, fecha, diaNombre)}
+            onMouseEnter={(e) => mostrarTooltip(e, reporteProcesado)}
+            onMouseLeave={ocultarTooltip}
+            className={`w-12 h-12 rounded-lg ${obtenerColor(reporteProcesado.estado)} hover:opacity-80 transition-opacity flex items-center justify-center`}
+            title={generarTooltipContenido(reporteProcesado)}
+          >
+            {reporteProcesado.estado === 'si' && <CheckCircle className="w-4 h-4 text-white" />}
+            {reporteProcesado.estado === 'no' && <XCircle className="w-4 h-4 text-white" />}
+            {reporteProcesado.estado === 'tarde' && <AlertCircle className="w-4 h-4 text-white" />}
+          </button>
+          {tieneSincronizacion && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white" 
+                 title="Sincronizado con backend"></div>
+          )}
+        </div>
+      </td>
+    );
+  };
 
   // ==================== RENDERIZADO PRINCIPAL ====================
   
@@ -404,6 +513,8 @@ const guardarReporte = async () => {
                   obtenerEstadoReporte={obtenerEstadoReporte}
                   obtenerNotaGeneral={obtenerNotaGeneral}
                   formatearFecha={formatearFechaLocal}
+                  getTargetLabel={getTargetLabel}
+                  processReportTarget={processReportTarget}
                 />
               }
             />
@@ -464,7 +575,7 @@ const guardarReporte = async () => {
               {cargandoReportes && (
                 <span className="ml-2 px-2 py-1 bg-yellow-500 text-xs rounded flex items-center gap-1">
                   <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                  Cargando reportes...
+                  Cargando...
                 </span>
               )}
             </h2>
@@ -523,66 +634,34 @@ const guardarReporte = async () => {
                       </td>
                       
                       {modoVista === 'semana' ? (
-                        // Vista semanal - mostrar 5 días
-                        semanaActual.fechas.map((fecha, index) => {
-                          const reporte = obtenerEstadoReporte(filial.id, programaActivo?.id, fecha);
-                          const clave = `${filial.id}-${programaActivo?.id}-${fecha.toISOString().split('T')[0]}`;
-                          const tieneSincronizacion = reportesBackend[clave];
-                          
-                          return (
-                            <td key={index} className="px-4 py-4 text-center">
-                              <div className="relative inline-block">
-                                <button
-                                  onClick={() => manejarClickReporte(filial.id, programaActivo?.id, fecha, diasSemana[index])}
-                                  onMouseEnter={(e) => mostrarTooltip(e, reporte)}
-                                  onMouseLeave={ocultarTooltip}
-                                  className={`w-12 h-12 rounded-lg ${obtenerColor(reporte.estado)} hover:opacity-80 transition-opacity flex items-center justify-center`}
-                                >
-                                  {reporte.estado === 'si' && <CheckCircle className="w-4 h-4 text-white" />}
-                                  {reporte.estado === 'no' && <XCircle className="w-4 h-4 text-white" />}
-                                  {reporte.estado === 'tarde' && <AlertCircle className="w-4 h-4 text-white" />}
-                                </button>
-                                {tieneSincronizacion && (
-                                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white" 
-                                       title="Sincronizado con backend"></div>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })
+                        // Vista semanal - mostrar 6 días (lunes a sábado)
+                        semanaActual.fechas.map((fecha, index) => 
+                          renderizarCeldaReporte(filial, fecha, diasSemana[index], index)
+                        )
                       ) : (
                         // Vista diaria - mostrar día seleccionado + hora + observaciones
                         (() => {
                           const reporte = obtenerEstadoReporte(filial.id, programaActivo?.id, fechaSeleccionada);
+                          // PROCESAMIENTO MÍNIMO
+                          const reporteProcesado = reporte.target ? reporte : processReportTarget(reporte);
                           const diaNombre = diasSemana[fechaSeleccionada.getDay() === 0 ? 6 : fechaSeleccionada.getDay() - 1] || 'Domingo';
-                          const clave = `${filial.id}-${programaActivo?.id}-${fechaSeleccionada.toISOString().split('T')[0]}`;
-                          const tieneSincronizacion = reportesBackend[clave];
+                          
+                          // Formatear observaciones con sistema de mapeo OPTIMIZADO
+                          const formatearObservaciones = () => {
+                            if (reporteProcesado.target && reporteProcesado.target !== 'Otros') {
+                              return getTargetLabel(reporteProcesado.target, false);
+                            }
+                            return reporteProcesado.motivo || '-';
+                          };
                           
                           return (
                             <>
-                              <td className="px-4 py-4 text-center">
-                                <div className="relative inline-block">
-                                  <button
-                                    onClick={() => manejarClickReporte(filial.id, programaActivo?.id, fechaSeleccionada, diaNombre)}
-                                    onMouseEnter={(e) => mostrarTooltip(e, reporte)}
-                                    onMouseLeave={ocultarTooltip}
-                                    className={`w-12 h-12 rounded-lg ${obtenerColor(reporte.estado)} hover:opacity-80 transition-opacity flex items-center justify-center`}
-                                  >
-                                    {reporte.estado === 'si' && <CheckCircle className="w-4 h-4 text-white" />}
-                                    {reporte.estado === 'no' && <XCircle className="w-4 h-4 text-white" />}
-                                    {reporte.estado === 'tarde' && <AlertCircle className="w-4 h-4 text-white" />}
-                                  </button>
-                                  {tieneSincronizacion && (
-                                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white" 
-                                         title="Sincronizado con backend"></div>
-                                  )}
-                                </div>
-                              </td>
+                              {renderizarCeldaReporte(filial, fechaSeleccionada, diaNombre)}
                               <td className="px-4 py-4 text-center text-sm text-gray-600">
-                                {reporte.horaReal || '-'}
+                                {reporteProcesado.horaReal || '-'}
                               </td>
                               <td className="px-4 py-4 text-sm text-gray-600 max-w-xs truncate">
-                                {reporte.motivo || '-'}
+                                {formatearObservaciones()}
                               </td>
                             </>
                           );
