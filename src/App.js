@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // Componentes principales
-import TransmissionTracker from './components/ControlTransmisiones';
+import ControlTransmisionesNuevo from './components/ControlTransmisiones'; // Nuevo componente
 import Login from './components/Login';
 import AdminLogin from './components/AdminLogin';
 import AdminPanel from './components/AdminPanel';
@@ -300,9 +300,6 @@ function App() {
   return (
     <Router>
       <div className="App min-h-screen bg-gray-50">
-        {/* Header autenticado - solo si hay algún usuario logueado */}
-        <HeaderAutenticado />
-
         {/* Rutas principales */}
         <Routes>
           {/* Ruta principal - Control de Transmisiones (para usuarios regulares) */}
@@ -310,14 +307,12 @@ function App() {
             path="/" 
             element={
               <UserProtectedRoute>
-                <div className={isAuthenticated() ? 'pb-4' : ''}>
-                  <TransmissionTracker
-                    programasBackend={programas}
-                    filialesBackend={filiales}
-                    estadoConexion={estadoConexion}
-                    onSincronizar={manejarSincronizacion}
-                  />
-                </div>
+                <ControlTransmisionesNuevo
+                  programasBackend={programas}
+                  filialesBackend={filiales}
+                  estadoConexion={estadoConexion}
+                  onSincronizar={manejarSincronizacion}
+                />
               </UserProtectedRoute>
             } 
           />
@@ -395,44 +390,6 @@ function App() {
             } 
           />
         </Routes>
-
-        {/* Footer del sistema - solo si está autenticado */}
-        {isAuthenticated() && (
-          <footer className="bg-white border-t border-gray-200 py-4">
-            <div className="max-w-7xl mx-auto px-4">
-              <div className="flex justify-between items-center text-sm text-gray-500">
-                <div className="flex items-center gap-4">
-                  <span>© 2025 Sistema EXITOSA - Control de Transmisiones</span>
-                  
-                  {/* Créditos de desarrollo */}
-                  <div className="flex items-center gap-3 text-xs">
-                    <div className="flex items-center gap-1">
-                      <Server className="w-3 h-3 text-blue-500" />
-                      <span className="text-blue-600 font-medium">Backend Kalek</span>
-                    </div>
-                    <span className="text-gray-400">•</span>
-                    <div className="flex items-center gap-1">
-                      <Code className="w-3 h-3 text-green-500" />
-                      <span className="text-green-600 font-medium">Frontend Dans</span>
-                    </div>
-                  </div>
-                  
-                  <span>API: {API_CONFIG.BASE_URL.split('://')[1]}</span>
-                  {(() => {
-                    const userInfo = getCurrentUserInfo();
-                    return userInfo && (
-                      <span>Sesión: {userInfo.tipo} ({userInfo.nombre})</span>
-                    );
-                  })()}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  <span>{formatearFechaHoraCompleta(horaActual)} ({TIMEZONE_PERU})</span>
-                </div>
-              </div>
-            </div>
-          </footer>
-        )}
       </div>
     </Router>
   );

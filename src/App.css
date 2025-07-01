@@ -1,199 +1,235 @@
-/* Estilos principales para la aplicación EXITOSA */
-.App {
-  text-align: left;
-  min-height: 100vh;
-  background-color: #f8fafc;
+/* Estilos específicos para el nuevo diseño del Control de Transmisiones */
+
+/* Sidebar */
+.sidebar {
+  width: 280px;
+  background-color: white;
+  border-right: 1px solid #e5e7eb;
+  height: calc(100vh - 64px);
+  position: fixed;
+  top: 64px;
+  left: 0;
+  overflow-y: auto;
+  z-index: 10;
 }
 
-/* Estilos personalizados para el sistema de transmisiones */
-.transmission-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1rem;
+.city-item {
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  margin-bottom: 0.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.transmission-status-button {
-  transition: all 0.2s ease-in-out;
-  transform-origin: center;
+.city-item:hover {
+  background-color: #f9fafb;
 }
 
-.transmission-status-button:hover {
+.city-item.active {
+  background-color: #eff6ff;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+/* Main Content */
+.main-content {
+  margin-left: 280px;
+  padding: 1.5rem;
+  min-height: calc(100vh - 64px);
+}
+
+/* Status Box */
+.status-box {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.375rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.status-box:hover {
   transform: scale(1.05);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-/* Animaciones suaves */
-.fade-in {
-  animation: fadeIn 0.3s ease-in-out;
+.status-box.transmitio {
+  background-color: #10b981;
 }
 
+.status-box.no-transmitio {
+  background-color: #ef4444;
+}
+
+.status-box.tarde {
+  background-color: #f59e0b;
+}
+
+.status-box.pendiente {
+  background-color: #d1d5db;
+}
+
+.sync-indicator {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  background-color: #3b82f6;
+  border-radius: 50%;
+  border: 1px solid white;
+}
+
+/* Week Grid */
+.week-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
+}
+
+.week-header {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
+  font-weight: 500;
+  text-align: center;
+  font-size: 0.875rem;
+  color: #4b5563;
+}
+
+.week-date {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0.375rem;
+}
+
+/* City Row */
+.city-row {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background-color: white;
+  transition: all 0.2s;
+}
+
+.city-row:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border-color: #d1d5db;
+}
+
+.city-row.expanded {
+  border-color: #93c5fd;
+}
+
+/* Chevron Icon */
+.chevron-icon {
+  transition: transform 0.2s;
+}
+
+.expanded .chevron-icon {
+  transform: rotate(180deg);
+}
+
+/* Program Row */
+.program-row {
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  margin-top: 0.5rem;
+  background-color: #f9fafb;
+}
+
+.program-row:hover {
+  background-color: #f3f4f6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 240px;
+    transform: translateX(-100%);
+    z-index: 10;
+    transition: transform 0.3s ease;
+  }
+  
+  .sidebar.show {
+    transform: translateX(0);
+  }
+  
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+  }
+  
+  .week-row {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.375rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .week-row.second-row {
+    margin-top: 0.5rem;
+  }
+  
+  .week-header {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.375rem;
+  }
+  
+  .week-header.second-row {
+    margin-top: 0.5rem;
+  }
+}
+
+/* Estado de transmisión en texto */
+.estado-transmitio {
+  color: #10b981;
+}
+
+.estado-no-transmitio {
+  color: #ef4444;
+}
+
+.estado-tarde {
+  color: #f59e0b;
+}
+
+.estado-pendiente {
+  color: #9ca3af;
+}
+
+/* Animaciones */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(-10px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
-}
-
-/* Estilos para el calendario */
-.calendar-dropdown {
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e5e7eb;
-}
-
-/* Estilos para las estadísticas */
-.stats-card {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid #e5e7eb;
-  transition: transform 0.2s ease-in-out;
-}
-
-.stats-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-/* Estilos para la tabla */
-.transmission-table {
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.transmission-table th,
-.transmission-table td {
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.transmission-table th:first-child,
-.transmission-table td:first-child {
-  border-left: 1px solid #e5e7eb;
-}
-
-.transmission-table th:last-child,
-.transmission-table td:last-child {
-  border-right: 1px solid #e5e7eb;
-}
-
-.transmission-table thead th:first-child {
-  border-top-left-radius: 0.5rem;
-}
-
-.transmission-table thead th:last-child {
-  border-top-right-radius: 0.5rem;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .transmission-grid {
-    grid-template-columns: repeat(5, 1fr);
-    gap: 0.5rem;
-  }
-  
-  .stats-card {
-    padding: 1rem;
-  }
-}
-
-/* Estilos para el modal */
-.modal-backdrop {
-  backdrop-filter: blur(4px);
-}
-
-.modal-content {
-  animation: slideUp 0.3s ease-out;
 }
 
 @keyframes slideUp {
   from {
-    opacity: 0;
     transform: translateY(20px);
+    opacity: 0;
   }
   to {
-    opacity: 1;
     transform: translateY(0);
+    opacity: 1;
   }
 }
 
-/* Estados de transmisión */
-.estado-transmitio {
-  background-color: #10b981;
-  color: white;
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
 }
 
-.estado-no-transmitio {
-  background-color: #ef4444;
-  color: white;
-}
-
-.estado-tardia {
-  background-color: #f59e0b;
-  color: white;
-}
-
-.estado-pendiente {
-  background-color: #9ca3af;
-  color: white;
-}
-
-/* Efectos de hover para botones */
-.btn-hover:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* Loading spinner personalizado */
-.loading-spinner {
-  border: 3px solid #f3f4f6;
-  border-top: 3px solid #3b82f6;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Estilos para pestañas de programas */
-.program-tab {
-  position: relative;
-  overflow: hidden;
-}
-
-.program-tab::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
-  transform: scaleX(0);
-  transition: transform 0.3s ease;
-}
-
-.program-tab.active::before {
-  transform: scaleX(1);
-}
-
-/* Efectos de focus para accesibilidad */
-.focus\:ring-exitosa:focus {
-  ring-color: #3b82f6;
-  ring-width: 2px;
-}
-
-/* Print styles */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  
-  .transmission-table {
-    page-break-inside: avoid;
-  }
+.slide-up {
+  animation: slideUp 0.3s ease-out;
 }
