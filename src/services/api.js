@@ -109,6 +109,7 @@ export const getProgramas = async () => {
   }
 };
 
+
 export const getPrograma = async (id) => {
   try {
     const response = await api.get(`/programa/${id}`);
@@ -124,25 +125,28 @@ export const createPrograma = async (data) => {
       nombre: data.nombre,
       isActivo: data.isActivo,
       diasSemana: data.diasSemana,
-      horaInicio: data.horario
+      horaInicio: data.horario,
+      filialesIds: data.filialesIds || [] // Añadido para asociar con filiales
     };
     
+    console.log('Enviando programa al backend:', programaCompleto);
     const response = await api.post('/programa', programaCompleto);
     return response.data;
   } catch (error) {
     throw error;
   }
 };
-
 export const updatePrograma = async (id, data) => {
   try {
     const programaActualizado = {
       nombre: data.nombre,
       isActivo: data.isActivo,
       diasSemana: data.diasSemana,
-      horaInicio: data.horario
+      horaInicio: data.horario,
+      filialesIds: data.filialesIds || [] // Añadido para asociar con filiales
     };
     
+    console.log('Actualizando programa en backend:', programaActualizado);
     const response = await api.put(`/programa/${id}`, programaActualizado);
     return response.data;
   } catch (error) {
@@ -182,9 +186,11 @@ export const createFilial = async (data) => {
   try {
     const filialCompleta = {
       nombre: data.nombre.toUpperCase(),
-      isActivo: data.isActivo
+      isActivo: data.isActivo,
+      programaIds: data.programaIds || [] // Añadido para asociar con programas
     };
     
+    console.log('Enviando filial al backend:', filialCompleta);
     const response = await api.post('/filial', filialCompleta);
     return response.data;
   } catch (error) {
@@ -196,9 +202,11 @@ export const updateFilial = async (id, data) => {
   try {
     const filialActualizada = {
       nombre: data.nombre.toUpperCase(),
-      isActivo: data.isActivo
+      isActivo: data.isActivo,
+      programaIds: data.programaIds || [] // Añadido para asociar con programas
     };
     
+    console.log('Actualizando filial en backend:', filialActualizada);
     const response = await api.put(`/filial/${id}`, filialActualizada);
     return response.data;
   } catch (error) {
@@ -247,6 +255,7 @@ export const transformarProgramas = (programasBackend) => {
       horario: programa.horaInicio || '00:00',
       isActivo: programa.isActivo,
       diasSemana: programa.diasSemana,
+      filialesIds: programa.filialesIds || [], // Añadido para asociar con filiales
       createdAt: transformarFechaDesdeBackend(programa.createdAt),
       updatedAt: transformarFechaDesdeBackend(programa.updateAt),
       horaInicioOriginal: programa.horaInicio,
@@ -263,11 +272,14 @@ export const transformarFiliales = (filialesBackend) => {
     id: filial.id,
     nombre: filial.nombre.toUpperCase(),
     isActivo: filial.isActivo,
+    programaIds: filial.programaIds || [], // Añadido para asociar con programas
     createdAt: transformarFechaDesdeBackend(filial.createdAt),
     updatedAt: transformarFechaDesdeBackend(filial.updateAt),
     createdAtOriginal: filial.createdAt,
     updatedAtOriginal: filial.updateAt,
-    reportes: filial.reportes || []
+    reportes: filial.reportes || [],
+    // Añadir acceso directo a los programas si están incluidos en la respuesta
+    programas: filial.programas || []
   }));
 };
 

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Calendar, Clock, CheckCircle, XCircle, AlertCircle, Search, 
   ChevronLeft, ChevronRight, FileText, Wifi, WifiOff, 
-  RefreshCw, Menu, Radio, Home
+  RefreshCw, Menu, Radio, Home, Info
 } from 'lucide-react';
 
 // Importar el sidebar moderno
@@ -132,6 +132,37 @@ const ControlTransmisionesNuevo = ({
     ), [filiales, semanaActual, fechaSeleccionada, programaActivo, modoVista, obtenerEstadoReporte]
   );
 
+  // Función para filtrar programas por filial seleccionada
+  const getProgramasFilial = useCallback(() => {
+    if (!ciudadSeleccionada) {
+      return programas; // Si no hay ciudad seleccionada, mostrar todos
+    }
+    
+    // Buscar la filial seleccionada
+    const filialActual = filiales.find(f => f.id === ciudadSeleccionada.id);
+    
+    if (!filialActual) {
+      return programas; // Si no encuentra la filial, mostrar todos
+    }
+    
+    // Si la filial tiene programas asociados directamente
+    if (filialActual.programas && filialActual.programas.length > 0) {
+      return filialActual.programas;
+    }
+    
+    // Si la filial tiene programaIds
+    if (filialActual.programaIds && filialActual.programaIds.length > 0) {
+      return programas.filter(programa => 
+        filialActual.programaIds.includes(programa.id)
+      );
+    }
+    
+    // Si no hay asociaciones, buscar programas que tengan esta filial en su filialesIds
+    return programas.filter(programa => 
+      programa.filialesIds && programa.filialesIds.includes(filialActual.id)
+    );
+  }, [ciudadSeleccionada, programas, filiales]);
+
   // ==================== FUNCIONES DE NAVEGACIÓN ====================
   const navegarSemana = useCallback((direccion) => {
     const nuevaFecha = new Date(fechaSeleccionada);
@@ -227,6 +258,29 @@ const ControlTransmisionesNuevo = ({
       setCiudadesExpandidas({[filiales[0].id]: true});
     }
   }, [filiales, ciudadSeleccionada]);
+
+  // Actualizar el programa activo cuando se cambia de filial
+  useEffect(() => {
+    if (ciudadSeleccionada) {
+      const programasDisponibles = getProgramasFilial();
+      
+      // Si hay programas disponibles para esta filial
+      if (programasDisponibles.length > 0) {
+        // Si el programa activo actual no está disponible para esta filial, 
+        // cambiar al primer programa disponible
+        const programaActualDisponible = programasDisponibles.some(
+          p => p.id === programaActivo?.id
+        );
+        
+        if (!programaActualDisponible) {
+          setProgramaActivo(programasDisponibles[0]);
+        }
+      } else {
+        // Si no hay programas para esta filial, quitar el programa activo
+        setProgramaActivo(null);
+      }
+    }
+  }, [ciudadSeleccionada, getProgramasFilial, programaActivo, setProgramaActivo]);
 
   // ==================== FUNCIONES PARA TOOLTIP ====================
   // Función para generar contenido del tooltip
@@ -440,7 +494,16 @@ const ControlTransmisionesNuevo = ({
             {programas.length > 0 && (
               <div className="bg-white rounded-lg shadow-sm mb-6">
                 <div className="flex overflow-x-auto">
-                  {programas.map((programa) => (
+                  {/* Mostrar mensaje si no hay programas para esta filial */}
+                  {getProgramasFilial().length === 0 && ciudadSeleccionada && (
+                    <div className="px-6 py-4 text-sm text-gray-500 flex items-center gap-2">
+                      <Info className="w-4 h-4" />
+                      <span>No hay programas disponibles para {ciudadSeleccionada.nombre}</span>
+                    </div>
+                  )}
+                  
+                  {/* Renderizar los programas filtrados */}
+                  {getProgramasFilial().map((programa) => (
                     <button
                       key={programa.id}
                       onClick={() => setProgramaActivo(programa)}

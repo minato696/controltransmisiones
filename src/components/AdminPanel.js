@@ -41,7 +41,8 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
     nombre: '',
     isActivo: true,
     diasSemana: 'LUNES',
-    horario: '05:00'
+    horario: '05:00',
+    filialesIds: []
   });
   
   const [filialForm, setFilialForm] = useState({
@@ -152,26 +153,30 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
           nombre: item.nombre,
           isActivo: item.isActivo,
           diasSemana: item.diasSemana || 'LUNES',
-          horario: item.horario || '05:00'
+          horario: item.horario || '05:00',
+          filialesIds: item.filialesIds || [] // Incluir IDs de filiales asociadas
         });
       } else {
         setProgramaForm({
           nombre: '',
           isActivo: true,
           diasSemana: 'LUNES',
-          horario: '05:00'
+          horario: '05:00',
+          filialesIds: [] // Inicializar como array vacío
         });
       }
     } else if (type === 'filial') {
       if (action === 'edit' && item) {
         setFilialForm({
           nombre: item.nombre,
-          isActivo: item.isActivo
+          isActivo: item.isActivo,
+          programaIds: item.programaIds || [] // Incluir si existe en el objeto de edición
         });
       } else {
         setFilialForm({
           nombre: '',
-          isActivo: true
+          isActivo: true,
+          programaIds: [] // Inicializar como array vacío
         });
       }
     }
@@ -194,7 +199,8 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
         nombre: programaForm.nombre,
         isActivo: programaForm.isActivo,
         diasSemana: programaForm.diasSemana,
-        horario: programaForm.horario
+        horario: programaForm.horario,
+        filialesIds: programaForm.filialesIds || [] // Incluir los IDs de filiales seleccionadas
       };
 
       if (modalAction === 'create') {
@@ -224,7 +230,8 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
       
       const filialData = {
         nombre: filialForm.nombre.toUpperCase(),
-        isActivo: filialForm.isActivo
+        isActivo: filialForm.isActivo,
+        programaIds: filialForm.programaIds || [] // Incluir programaIds si existe
       };
 
       if (modalAction === 'create') {
@@ -279,6 +286,58 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
         setAdminLoading(false);
       }
     }
+  };
+
+  // Renderizar listado de filiales asociadas a un programa
+  const renderFilialAsociadas = (programaId) => {
+    const filialesAsociadas = filiales.filter(filial => 
+      filial.programaIds && filial.programaIds.includes(programaId)
+    );
+    
+    if (filialesAsociadas.length === 0) {
+      return <span className="text-xs text-gray-400">Sin filiales asignadas</span>;
+    }
+    
+    return (
+      <div className="flex flex-wrap gap-1 mt-1">
+        {filialesAsociadas.slice(0, 3).map(filial => (
+          <span key={filial.id} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+            {filial.nombre}
+          </span>
+        ))}
+        {filialesAsociadas.length > 3 && (
+          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full">
+            +{filialesAsociadas.length - 3} más
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  // Renderizar listado de programas asociados a una filial
+  const renderProgramasAsociados = (filialId) => {
+    const programasAsociados = programas.filter(programa => 
+      filial => filial.filialesIds && filial.filialesIds.includes(filialId)
+    );
+    
+    if (programasAsociados.length === 0) {
+      return <span className="text-xs text-gray-400">Sin programas asignados</span>;
+    }
+    
+    return (
+      <div className="flex flex-wrap gap-1 mt-1">
+        {programasAsociados.slice(0, 3).map(programa => (
+          <span key={programa.id} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
+            {programa.nombre}
+          </span>
+        ))}
+        {programasAsociados.length > 3 && (
+          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full">
+            +{programasAsociados.length - 3} más
+          </span>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -417,6 +476,9 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
                         Creado: {programa.createdAt}
                       </p>
                     )}
+                    
+                    {/* Mostrar filiales asociadas */}
+                    {renderFilialAsociadas(programa.id)}
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -473,6 +535,9 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
                         Creado: {filial.createdAt}
                       </p>
                     )}
+                    
+                    {/* Mostrar programas asociados */}
+                    {renderProgramasAsociados(filial.id)}
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -599,6 +664,52 @@ const AdminPanel = ({ estadoConexion, onSincronizar }) => {
                         <option value="DOMINGO">Domingo</option>
                         <option value="DIARIO">Diario</option>
                       </select>
+                    </div>
+
+                    {/* Nuevo campo: Selector de filiales */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Asignar a Filiales
+                      </label>
+                      <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-lg p-2">
+                        {filiales.map(filial => (
+                          <div key={filial.id} className="flex items-center mb-1">
+                            <input
+                              type="checkbox"
+                              id={`filial-${filial.id}`}
+                              checked={programaForm.filialesIds?.includes(filial.id) || false}
+                              onChange={(e) => {
+                                const isChecked = e.target.checked;
+                                setProgramaForm(prev => {
+                                  const currentFiliales = prev.filialesIds || [];
+                                  
+                                  // Si está marcado y no existe, añadirlo
+                                  if (isChecked && !currentFiliales.includes(filial.id)) {
+                                    return { ...prev, filialesIds: [...currentFiliales, filial.id] };
+                                  }
+                                  
+                                  // Si no está marcado y existe, quitarlo
+                                  if (!isChecked && currentFiliales.includes(filial.id)) {
+                                    return { 
+                                      ...prev, 
+                                      filialesIds: currentFiliales.filter(id => id !== filial.id) 
+                                    };
+                                  }
+                                  
+                                  return prev;
+                                });
+                              }}
+                              className="h-4 w-4 text-blue-600 rounded"
+                            />
+                            <label htmlFor={`filial-${filial.id}`} className="ml-2 text-sm text-gray-700">
+                              {filial.nombre}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Selecciona las filiales donde estará disponible este programa
+                      </p>
                     </div>
 
                     <div className="flex items-center">
