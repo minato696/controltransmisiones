@@ -6,6 +6,9 @@ import {
   RefreshCw, Menu, Radio, Home
 } from 'lucide-react';
 
+// Importar el sidebar moderno
+import ModernSidebar from './ModernSidebar';
+
 // Importar módulos refactorizados del sistema actual - mantenemos la lógica de negocio
 import { useGestorDatos } from './GestorDatos';
 import { 
@@ -237,55 +240,61 @@ const ControlTransmisionesNuevo = ({
     );
   }
 
-  // ==================== FUNCIÓN PARA RENDERIZAR CELDA DE REPORTE ====================
-  const renderizarCeldaReporte = (filial, fecha, diaNombre, index = null) => {
-    if (!programaActivo) return null;
-    
-    const reporte = obtenerEstadoReporte(filial.id, programaActivo.id, fecha);
-    const clave = `${filial.id}-${programaActivo.id}-${fecha.toISOString().split('T')[0]}`;
-    const tieneSincronizacion = reportesBackend[clave];
-    
-    let estadoClase = '';
-    let icono = null;
-    
-    switch (reporte.estado) {
-      case 'si':
-        estadoClase = 'transmitio';
-        icono = <CheckCircle className="w-4 h-4 text-white" />;
-        break;
-      case 'no':
-        estadoClase = 'no-transmitio';
-        icono = <XCircle className="w-4 h-4 text-white" />;
-        break;
-      case 'tarde':
-        estadoClase = 'tarde';
-        icono = <AlertCircle className="w-4 h-4 text-white" />;
-        break;
-      default:
-        estadoClase = 'pendiente';
-        icono = <Clock className="w-4 h-4 text-white" />;
-    }
-    
-    return (
-      <div className="flex justify-center">
-        <div className="relative inline-block">
-          <button
-            onClick={() => manejarClickReporte(filial.id, programaActivo.id, fecha, diaNombre)}
-            onMouseEnter={(e) => mostrarTooltip(e, reporte)}
-            onMouseLeave={ocultarTooltip}
-            className={`status-box ${estadoClase} w-10 h-10 rounded-lg hover:opacity-80 transition-opacity flex items-center justify-center`}
-            title={`Ver/editar reporte de ${filial.nombre} - ${diaNombre}`}
-          >
-            {icono}
-          </button>
-          {tieneSincronizacion && (
-            <div className="sync-indicator absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full border-2 border-white" 
-                title="Sincronizado con backend"></div>
-          )}
-        </div>
+  // ==================== FUNCIÓN RENDERIZAR CELDA - ARREGLO SIMPLE ====================
+const renderizarCeldaReporte = (filial, fecha, diaNombre, index = null) => {
+  if (!programaActivo) return null;
+  
+  const reporte = obtenerEstadoReporte(filial.id, programaActivo.id, fecha);
+  const clave = `${filial.id}-${programaActivo.id}-${fecha.toISOString().split('T')[0]}`;
+  const tieneSincronizacion = reportesBackend[clave];
+  
+  let estadoClase = '';
+  let icono = null;
+  
+  // Usar las clases exactas que funcionan en tu CSS
+  switch (reporte.estado) {
+    case 'si':
+      estadoClase = 'transmitio'; // Usar 'transmitio' como en tu CSS original
+      icono = <CheckCircle className="w-4 h-4 text-white" />;
+      break;
+    case 'no':
+      estadoClase = 'no-transmitio'; // Usar 'no-transmitio' como en tu CSS original
+      icono = <XCircle className="w-4 h-4 text-white" />;
+      break;
+    case 'tarde':
+      estadoClase = 'tarde';
+      icono = <AlertCircle className="w-4 h-4 text-white" />;
+      break;
+    default:
+      estadoClase = 'pendiente';
+      icono = <Clock className="w-4 h-4 text-white" />;
+  }
+  
+  return (
+    <div className="flex justify-center" key={`${filial.id}-${index}`}>
+      <div className="relative inline-block">
+        <button
+          onClick={() => manejarClickReporte(filial.id, programaActivo.id, fecha, diaNombre)}
+          onMouseEnter={(e) => mostrarTooltip(e, reporte)}
+          onMouseLeave={ocultarTooltip}
+          className={`status-box ${estadoClase}`}
+          title={`Ver/editar reporte de ${filial.nombre} - ${diaNombre}`}
+          type="button"
+        >
+          {icono}
+        </button>
+        
+        {/* Indicador de sincronización */}
+        {tieneSincronizacion && (
+          <div 
+            className="sync-indicator" 
+            title="Sincronizado con backend"
+          />
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   // ==================== RENDERIZADO PRINCIPAL ====================
   return (
@@ -331,41 +340,17 @@ const ControlTransmisionesNuevo = ({
       </header>
       
       <div className="flex flex-1">
-        {/* Sidebar */}
-        <aside className={`sidebar w-64 bg-white border-r border-gray-200 h-[calc(100vh-64px)] fixed top-16 left-0 overflow-y-auto z-10 transform transition-transform duration-300 ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <Home className="w-5 h-5 text-blue-600" />
-              Ciudades
-            </h2>
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
-              <input 
-                type="text" 
-                placeholder="Buscar ciudad..." 
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                value={filtroFilial}
-                onChange={(e) => setFiltroFilial(e.target.value)}
-              />
-            </div>
-          </div>
-          
-          <div className="p-2">
-            {filialesFiltradas.map(filial => (
-              <div 
-                key={filial.id} 
-                className={`city-item flex items-center justify-between p-3 rounded-md mb-1 cursor-pointer ${ciudadSeleccionada?.id === filial.id ? 'active bg-blue-50 text-blue-600 font-medium' : 'hover:bg-gray-50'}`}
-                onClick={() => seleccionarCiudad(filial)}
-              >
-                <div className="flex items-center gap-2">
-                  <Home className={`w-4 h-4 ${ciudadSeleccionada?.id === filial.id ? 'text-blue-600' : 'text-gray-500'}`} />
-                  <span>{filial.nombre}</span>
-                </div>
-                <ChevronRight className={`w-4 h-4 ${ciudadSeleccionada?.id === filial.id ? 'text-blue-600' : 'text-gray-400'}`} />
-              </div>
-            ))}
-          </div>
-        </aside>
+        {/* SIDEBAR MODERNO - REEMPLAZADO */}
+        <ModernSidebar 
+          filiales={filialesFiltradas}
+          filtroFilial={filtroFilial}
+          setFiltroFilial={setFiltroFilial}
+          ciudadSeleccionada={ciudadSeleccionada}
+          onCiudadSelect={seleccionarCiudad}
+          showMobileSidebar={showMobileSidebar}
+          setShowMobileSidebar={setShowMobileSidebar}
+          estadoConexion={estadoConexion}
+        />
         
         {/* Main content */}
         <main className="main-content md:ml-64 w-full p-6">
@@ -409,6 +394,30 @@ const ControlTransmisionesNuevo = ({
                 </div>
               </div>
             </div>
+
+            {/* Pestañas de Programas */}
+            {programas.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm mb-6">
+                <div className="flex overflow-x-auto">
+                  {programas.map((programa) => (
+                    <button
+                      key={programa.id}
+                      onClick={() => setProgramaActivo(programa)}
+                      className={`px-6 py-4 text-sm font-medium border-b-2 whitespace-nowrap transition-all ${
+                        programaActivo?.id === programa.id
+                          ? 'text-blue-600 border-blue-600 bg-blue-50'
+                          : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span>{programa.nombre}</span>
+                        <span className="text-xs opacity-75">{programa.horario}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             
             {/* Week header (days) */}
             <div className="hidden md:block">
