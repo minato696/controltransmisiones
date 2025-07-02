@@ -14,6 +14,7 @@ import { useGestorDatos } from './GestorDatos';
 import { 
   ModalReporte,
   ModalNotas,
+  TooltipReporte,       // ⭐️ Nuevo: reutilizamos el tooltip como componente
   useModalManager
 } from './InterfazUsuario';
 import { 
@@ -227,6 +228,102 @@ const ControlTransmisionesNuevo = ({
     }
   }, [filiales, ciudadSeleccionada]);
 
+  // ==================== FUNCIONES PARA TOOLTIP ====================
+  // Función para generar contenido del tooltip
+  const generarTooltipContenido = useCallback((reporteData) => {
+    // Asegurar que el reporte tenga todas las propiedades necesarias
+    const reporte = { ...reporteData };
+    
+    if (reporte.estado === 'si') {
+      return `✅ Transmitió\nHora: ${reporte.horaReal || 'No registrada'}`;
+    }
+    
+    if (reporte.estado === 'no') {
+      let contenido = `❌ No transmitió`;
+      if (reporte.target) {
+        contenido += `\nMotivo: ${reporte.target}`;
+        
+        // Mostrar detalle para "Otros" cuando hay motivo personalizado
+        if ((reporte.target === 'Otros' || reporte.target === 'Otro') && reporte.motivo) {
+          contenido += `\nDetalle: ${reporte.motivo}`;
+        }
+      }
+      return contenido;
+    }
+    
+    if (reporte.estado === 'tarde') {
+      let contenido = `⏰ Transmitió tarde`;
+      if (reporte.horaReal) {
+        contenido += `\nHora real: ${reporte.horaReal}`;
+      }
+      if (reporte.hora_tt) {
+        contenido += `\nHora TT: ${reporte.hora_tt}`;
+      }
+      if (reporte.motivo) {
+        contenido += `\nMotivo: ${reporte.motivo}`;
+      }
+      return contenido;
+    }
+    
+    return `⏳ Pendiente`;
+  }, []);
+
+  // ==================== FUNCIÓN RENDERIZAR CELDA - ARREGLO SIMPLE ====================
+  const renderizarCeldaReporte = (filial, fecha, diaNombre, index = null) => {
+    if (!programaActivo) return null;
+    
+    const reporte = obtenerEstadoReporte(filial.id, programaActivo.id, fecha);
+    const clave = `${filial.id}-${programaActivo.id}-${fecha.toISOString().split('T')[0]}`;
+    const tieneSincronizacion = reportesBackend[clave];
+    
+    let estadoClase = '';
+    let icono = null;
+    
+    // Usar las clases exactas que funcionan en tu CSS
+    switch (reporte.estado) {
+      case 'si':
+        estadoClase = 'transmitio'; // Usar 'transmitio' como en tu CSS original
+        icono = <CheckCircle className="w-4 h-4 text-white" />;
+        break;
+      case 'no':
+        estadoClase = 'no-transmitio'; // Usar 'no-transmitio' como en tu CSS original
+        icono = <XCircle className="w-4 h-4 text-white" />;
+        break;
+      case 'tarde':
+        estadoClase = 'tarde';
+        icono = <AlertCircle className="w-4 h-4 text-white" />;
+        break;
+      default:
+        estadoClase = 'pendiente';
+        icono = <Clock className="w-4 h-4 text-white" />;
+    }
+    
+    return (
+      <div className="flex justify-center" key={`${filial.id}-${index}`}>
+        <div className="relative inline-block">
+          <button
+            onClick={() => manejarClickReporte(filial.id, programaActivo.id, fecha, diaNombre)}
+            onMouseEnter={(e) => mostrarTooltip(e, reporte)}
+            onMouseLeave={ocultarTooltip}
+            className={`status-box ${estadoClase}`}
+            title={generarTooltipContenido(reporte)}
+            type="button"
+          >
+            {icono}
+          </button>
+          
+          {/* Indicador de sincronización */}
+          {tieneSincronizacion && (
+            <div 
+              className="sync-indicator" 
+              title="Sincronizado con backend"
+            />
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // ==================== RENDERIZADO CONDICIONAL ====================
   if (loading) {
     return (
@@ -239,62 +336,6 @@ const ControlTransmisionesNuevo = ({
       </div>
     );
   }
-
-  // ==================== FUNCIÓN RENDERIZAR CELDA - ARREGLO SIMPLE ====================
-const renderizarCeldaReporte = (filial, fecha, diaNombre, index = null) => {
-  if (!programaActivo) return null;
-  
-  const reporte = obtenerEstadoReporte(filial.id, programaActivo.id, fecha);
-  const clave = `${filial.id}-${programaActivo.id}-${fecha.toISOString().split('T')[0]}`;
-  const tieneSincronizacion = reportesBackend[clave];
-  
-  let estadoClase = '';
-  let icono = null;
-  
-  // Usar las clases exactas que funcionan en tu CSS
-  switch (reporte.estado) {
-    case 'si':
-      estadoClase = 'transmitio'; // Usar 'transmitio' como en tu CSS original
-      icono = <CheckCircle className="w-4 h-4 text-white" />;
-      break;
-    case 'no':
-      estadoClase = 'no-transmitio'; // Usar 'no-transmitio' como en tu CSS original
-      icono = <XCircle className="w-4 h-4 text-white" />;
-      break;
-    case 'tarde':
-      estadoClase = 'tarde';
-      icono = <AlertCircle className="w-4 h-4 text-white" />;
-      break;
-    default:
-      estadoClase = 'pendiente';
-      icono = <Clock className="w-4 h-4 text-white" />;
-  }
-  
-  return (
-    <div className="flex justify-center" key={`${filial.id}-${index}`}>
-      <div className="relative inline-block">
-        <button
-          onClick={() => manejarClickReporte(filial.id, programaActivo.id, fecha, diaNombre)}
-          onMouseEnter={(e) => mostrarTooltip(e, reporte)}
-          onMouseLeave={ocultarTooltip}
-          className={`status-box ${estadoClase}`}
-          title={`Ver/editar reporte de ${filial.nombre} - ${diaNombre}`}
-          type="button"
-        >
-          {icono}
-        </button>
-        
-        {/* Indicador de sincronización */}
-        {tieneSincronizacion && (
-          <div 
-            className="sync-indicator" 
-            title="Sincronizado con backend"
-          />
-        )}
-      </div>
-    </div>
-  );
-};
 
   // ==================== RENDERIZADO PRINCIPAL ====================
   return (
@@ -594,18 +635,7 @@ const renderizarCeldaReporte = (filial, fecha, diaNombre, index = null) => {
       />
 
       {/* Tooltip */}
-      {tooltip.visible && (
-        <div
-          className="fixed z-50 bg-black text-white px-3 py-2 rounded-lg text-sm pointer-events-none transform -translate-x-1/2 -translate-y-full max-w-xs break-words"
-          style={{
-            left: tooltip.x,
-            top: tooltip.y,
-          }}
-        >
-          <div className="whitespace-pre-wrap">{tooltip.content}</div>
-          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-black"></div>
-        </div>
-      )}
+      <TooltipReporte tooltip={tooltip} />
     </div>
   );
 };
